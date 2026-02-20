@@ -1,10 +1,43 @@
 import pandas as pd
 import numpy as np
 import random
+import json
+import os
+from datetime import date
 from faker import Faker
 import requests
 
 fake = Faker()
+
+# ---------------------------------------------------------------------------
+# OSM Cache Helpers
+# ---------------------------------------------------------------------------
+_OSM_CACHE_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "heat_osm_cache")
+
+def _cache_key(lat: float, lon: float) -> str:
+    """Daily cache key tied to coordinates + today's date."""
+    return f"{lat:.4f}_{lon:.4f}_{date.today().isoformat()}"
+
+def _load_osm_cache(key: str):
+    """Return parsed JSON from cache, or None on miss."""
+    path = os.path.join(_OSM_CACHE_DIR, f"{key}.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+def _save_osm_cache(key: str, data: dict):
+    """Persist raw Overpass JSON to disk."""
+    os.makedirs(_OSM_CACHE_DIR, exist_ok=True)
+    path = os.path.join(_OSM_CACHE_DIR, f"{key}.json")
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass  # Non-fatal: just skip caching
 
 def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14:00", progress_callback=None):
     """Generates mock data for Thermal, Trees, and Sensors layers centered on provided coordinates."""
@@ -132,11 +165,32 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
         );
         out geom; // Note: Changed to out geom to get coordinates for polygons and ways
         """
-        # Set a strict timeout so the app doesn't hang forever
-        response = requests.get(overpass_url, params={'data': query}, timeout=25)
         
-        if response.status_code == 200:
-            osm_data = response.json()
+        # --- Cache check: skip the expensive Overpass call if we have today's data ---
+        osm_cache_key = _cache_key(CENTER_LAT, CENTER_LON)
+        osm_data = _load_osm_cache(osm_cache_key)
+        
+        if osm_data is not None:
+            if progress_callback: progress_callback("Loaded from local cache...", 50)
+        else:
+            # Set a strict timeout so the app doesn't hang forever
+            response = requests.get(overpass_url, params={'data': query}, timeout=25)
+            
+            if response.status_code != 200:
+                print(f"Warning: Overpass API returned status {response.status_code}")
+                import streamlit as st
+                if response.status_code == 504:
+                    st.session_state.map_error_toast = "⏳ OpenStreetMap Gateway Timeout (504). The query was too large for the region."
+                elif response.status_code == 429:
+                    st.session_state.map_error_toast = "⚠️ OpenStreetMap API is rate-limited (429). Map loaded without Nature ID assets."
+                else:
+                    st.session_state.map_error_toast = f"⚠️ OpenStreetMap Error {response.status_code}. Map loaded without real-world assets."
+                osm_data = {"elements": []}  # Use empty fallback
+            else:
+                osm_data = response.json()
+                _save_osm_cache(osm_cache_key, osm_data)  # Persist for today
+        
+        if osm_data is not None:
             
             # Helper to extract lat/lon (handling ways/relations with out geom)
             def get_coords(el):
@@ -260,16 +314,6 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
             process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", [21, 128, 61, 200], 200) # Green-700
             process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", [12, 74, 110, 200], 100) # Sky-900
             
-        else:
-            print(f"Warning: Overpass API returned status {response.status_code}")
-            import streamlit as st
-            if response.status_code == 504:
-                st.session_state.map_error_toast = "⏳ OpenStreetMap Gateway Timeout (504). The query was too large for the region."
-            elif response.status_code == 429:
-                st.session_state.map_error_toast = "⚠️ OpenStreetMap API is rate-limited (429). Map loaded without Nature ID assets."
-            else:
-                st.session_state.map_error_toast = f"⚠️ OpenStreetMap Error {response.status_code}. Map loaded without real-world assets."
-                
     except requests.exceptions.Timeout:
         print("Error: Overpass API request timed out after 25 seconds.")
         import streamlit as st

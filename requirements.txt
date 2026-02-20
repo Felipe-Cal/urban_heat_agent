@@ -1,6 +1,8 @@
 streamlit
 pydeck
 pandas
+numpy
 faker
 requests
 openai
+markdown-pdf
