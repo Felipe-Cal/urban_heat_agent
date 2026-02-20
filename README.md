@@ -1,44 +1,40 @@
-# Gaia Heat Sync — Urban Heat Sync Agent
+# Gaia Heat Sync — Planetary Intelligence Dashboard
 
-> **Role**: City Resilience Cockpit & Planetary Intelligence Proxy  
-> **Stack**: Python · Streamlit · PyDeck · Mapbox · OpenStreetMap · Open-Meteo  
-> **Status**: Live Prototype · MVP Stage
+A high-fidelity Streamlit dashboard for urban heat resilience, built for the Open Earth Foundation. It visualises live thermal, air quality, and nature ID data on an interactive 3D map, and features an AI agent for bio-regional analysis and ROI simulation.
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/Felipe-Cal/urban_heat_agent)
+## Features
 
----
+- **Live Data** — Real temperature & AQI from Open-Meteo; real geographic assets from OpenStreetMap
+- **Multi-Layer Map** — 16 toggleable layers (thermal, NDVI, albedo, population, buildings, traffic, nature assets)
+- **Gaia Agent** — GPT-4o-mini-powered AI agent for region analysis, interventions, and Q&A
+- **ROI Sandbox** — Click-to-simulate cooling interventions with cost/impact estimates
+- **Green Ledger** — Simulated Nature ID hashing and verifiable data provenance
+- **PDF Briefings** — Auto-generated professional briefing reports
 
-## 🌍 Vision
-
-This prototype is the **"First Domino"** of a multi-stage roadmap toward a self-governing planetary intelligence for urban climate resilience.
-
-| Stage | Year | Scope | Agency |
-|-------|------|-------|--------|
-| **1. Urban Heat Agent** | 2026 | City-scale | Human-in-the-loop |
-| **2. Regional Orchestration** | 2032 | Watershed & grid | Semi-autonomous |
-| **3. Gaia Sovereign AI** | 2040 | Planetary | Fully sovereign |
-
----
-
-## 🛠 Features
-
-- **Biosphere Map**: Thermal heatmap, NDVI, Albedo, Population Density, Building Mass, Traffic Arteries — all from real OSM/satellite data
-- **Nature ID Registry**: Digital twins for every urban tree, park, wetland, and green roof — pulled live from OpenStreetMap
-- **Gaia Agent**: GPT-4o-mini powered assistant with streaming, map layer control, and Sense-Plan-Act reasoning loop
-- **ROI Sandbox**: Click any map asset to simulate cooling interventions with cost/ROI calculations
-- **Green Ledger**: Verifiable Data Provenance — every intervention minted with a deterministic cryptographic hash
-- **PDF Briefing**: AI-generated policy brief exportable as a professional PDF
-
----
-
-## 🚀 Running Locally
+## Setup
 
 ```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd heat
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Configure secrets (see below)
+
+# 5. Run
 streamlit run app.py
 ```
 
-Create `.streamlit/secrets.toml`:
+## Secrets Configuration
+
+Create `.streamlit/secrets.toml` (this file is git-ignored):
+
 ```toml
 OPENAI_API_KEY = "sk-..."
 
@@ -46,14 +42,37 @@ OPENAI_API_KEY = "sk-..."
 access_token = "pk...."
 ```
 
----
+- **OpenAI key** is required for the Gaia Agent and PDF report generation. Without it, the agent falls back to a simulated response.
+- **Mapbox token** is required for the satellite/street base map. Without it, the app falls back to a free CartoDB base map.
 
-## ☁️ Deploying to Streamlit Cloud
+## Project Structure
 
-1. Push to GitHub (this repo)
-2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → select `Felipe-Cal/urban_heat_agent`, branch `master`, file `app.py`
-3. Under **Settings → Secrets**, paste your `secrets.toml` contents
-4. Click **Deploy**
+```
+heat/
+├── app.py                  # Main Streamlit entry point
+├── modules/
+│   ├── __init__.py
+│   ├── models.py           # CityData, LayerToggles, MapConfig dataclasses
+│   ├── data_generator.py   # Fetches + synthesises all city data
+│   ├── map_layers.py       # PyDeck layer composition
+│   ├── agent_logic.py      # AgentSimulator (OpenAI + simulation scenarios)
+│   └── styles.py           # CSS injection
+├── tests/
+│   ├── __init__.py
+│   ├── test_data_generator.py
+│   ├── test_agent_logic.py
+│   └── test_map_layers.py
+├── .streamlit/
+│   ├── config.toml         # Theme and server config
+│   └── secrets.toml        # API keys (git-ignored)
+└── requirements.txt        # Pinned dependencies
+```
 
-> **Note**: OSM data is cached daily to `/tmp/heat_osm_cache/` to prevent cold-start timeouts on Streamlit Cloud's shared infrastructure.
+## Running Tests
 
+```bash
+# From the project root
+python -m pytest tests/ -v
+```
+
+Tests mock all HTTP calls (Open-Meteo, Overpass API, OpenAI) so they run offline and fast.

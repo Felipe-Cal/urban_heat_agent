@@ -48,10 +48,15 @@ from modules.agent_logic import AgentSimulator
 
 @pytest.fixture(autouse=True)
 def reset_session_state():
-    """Clear and reinitialise session state before every test."""
+    """
+    Clear session state before every test.
+
+    We do NOT pre-set chat_history or agent_status here — AgentSimulator.__init__
+    is responsible for initialising those, and the `not in` guard must be triggered.
+    Non-init keys that the tests rely on are set directly.
+    """
     _session_state.clear()
-    _session_state["chat_history"] = []
-    _session_state["agent_status"] = "IDLE"
+    # Do NOT set chat_history or agent_status — let AgentSimulator.__init__ do that.
     _session_state["selected_city_name"] = "Los Angeles, USA"
     _session_state["simulations"] = []
     _session_state["simulated_cooling"] = 0.0
