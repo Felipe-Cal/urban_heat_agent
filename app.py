@@ -8,13 +8,13 @@ from modules.agent_logic import AgentSimulator
 
 # 1. Page Config
 st.set_page_config(
-    page_title="Gaia Heat Sync | LA Bio-Region",
-    page_icon="🌿",
+    page_title="Gaia Heat Sync | Planetary Intelligence",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # Hide sidebar entirely
 )
 
-# 2. Load "Bio-Minimalism" Styles
+# 2. Load "Electric" Styles
 load_css()
 
 # City Data (Bio-Regions)
@@ -35,10 +35,19 @@ CITIES = {
 if 'selected_city_name' not in st.session_state:
     st.session_state.selected_city_name = "Los Angeles, USA"
 
-if 'data' not in st.session_state:
-    # Generate initial data for default city
+if 'time_of_day' not in st.session_state:
+    st.session_state.time_of_day = "14:00"
+    
+if 'pending_map_click' not in st.session_state:
+    st.session_state.pending_map_click = None
+    
+if 'last_clicked_asset' not in st.session_state:
+    st.session_state.last_clicked_asset = None
+
+if 'data' not in st.session_state or len(st.session_state.data) != 19:
     city = CITIES[st.session_state.selected_city_name]
-    st.session_state.data = generate_mock_data(city['lat'], city['lon'])
+    with st.spinner("Initializing Gaia Node & Fetching Biosphere Data..."):
+        st.session_state.data = generate_mock_data(city['lat'], city['lon'], st.session_state.time_of_day)
     
 if 'agent' not in st.session_state:
     st.session_state.agent = AgentSimulator()
@@ -47,140 +56,250 @@ if 'layer_toggles' not in st.session_state:
     st.session_state.layer_toggles = {
         "thermal": True,
         "trees": False,
-        "sensors": False
+        "water": False,
+        "parks": False,
+        "shelters": False,
+        "fountains": False,
+        "green_roofs": False,
+        "gardens": False,
+        "forests": False,
+        "wetlands": False,
+        "sensors": False,
+        "ndvi": False,
+        "albedo": False,
+        "buildings": False,
+        "traffic": False,
+        "population": False
     }
 
 # Unpack Data
-df_thermal, df_trees, df_sensors = st.session_state.data
+df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountains, df_green_roofs, df_gardens, df_forests, df_wetlands, df_sensors, df_ndvi, df_albedo, df_buildings, df_traffic, df_population, resilience_score, current_temp, current_aqi = st.session_state.data
 agent = st.session_state.agent
 
-# --- SIDEBAR (THE PROXY) ---
-with st.sidebar:
-    st.markdown("### 🧬 Gaia Agent (Beta)")
-    st.caption(f"{st.session_state.selected_city_name} Node")
+# --- MAIN LAYOUT ---
+# 40% Left (Agent), 60% Right (Map)
+col_agent, col_map = st.columns([4, 6], gap="large")
+
+# ==========================================
+# LEFT COLUMN: THE AGENT (THE PROXY)
+# ==========================================
+with col_agent:
+    st.markdown("### ⚡ Gaia Agent")
+    st.caption(f"System Node: {st.session_state.selected_city_name}")
     
     # Status Indicator
     status = st.session_state.get('agent_status', 'IDLE')
     if status != "IDLE":
         st.markdown(f'<div class="status-dot status-active"></div> **Status: {status}**', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="status-dot" style="background-color: #cbd5e1;"></div> Status: Monitoring', unsafe_allow_html=True)
+        st.markdown(f'<div class="status-dot" style="background-color: #333;"></div> Status: Listening', unsafe_allow_html=True)
          
     st.divider()
 
-    # City Selector
-    st.markdown("**Bio-Region Node**")
-    selected_city = st.selectbox(
-        "Select City",
-        options=list(CITIES.keys()),
-        index=list(CITIES.keys()).index(st.session_state.selected_city_name),
-        label_visibility="collapsed"
-    )
+    # Chat History Container (Scrollable)
+    chat_container = st.container(height=500, border=False)
+    with chat_container:
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"], unsafe_allow_html=True)
 
-    # Handle City Change
-    if selected_city != st.session_state.selected_city_name:
-        st.session_state.selected_city_name = selected_city
-        coords = CITIES[selected_city]
-        st.session_state.data = generate_mock_data(coords['lat'], coords['lon'])
-        st.rerun()
-
-    st.divider()
-
-    # Agent Actions (Scenarios)
-    st.markdown("**Autonomous Reasoning Scenarios**")
+    # Agent Action Shortcuts
+    st.markdown("<p style='font-size: 0.8em; color: #888;'>SUGGESTED ACTIONS</p>", unsafe_allow_html=True)
+    btn1, btn2, btn3 = st.columns(3)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Deploy\nNerves"):
+    with btn1:
+        if st.button("Scan for\nData Desserts", use_container_width=True):
             agent.simulate_deployment()
-            st.session_state.layer_toggles["sensors"] = True # Auto-enable layer
+            st.session_state.layer_toggles["sensors"] = True
             st.rerun()
-            
-    with col2:
-        if st.button("Win-Win\nIntervention"):
+    with btn2:
+        if st.button("Detect Thermal\nRisk Areas", use_container_width=True):
             agent.simulate_intervention()
             st.session_state.layer_toggles["trees"] = True
             st.rerun()
+    with btn3:
+        if st.button("Verify Green\nBond Impact", use_container_width=True):
+            agent.simulate_verification()
+            st.rerun()
             
-    if st.button("Verify Green Bond Impact", use_container_width=True):
-        agent.simulate_verification()
+    if st.button("📄 Generate Briefing Report", use_container_width=True, type="primary"):
+        st.session_state.generating_pdf = True
         st.rerun()
 
-    st.divider()
+    if st.session_state.get('generating_pdf', False):
+        with st.spinner("Generating Professional PDF Briefing..."):
+            pdf_bytes = agent.generate_pdf_report()
+            if pdf_bytes:
+                st.session_state.pdf_ready = pdf_bytes
+            st.session_state.generating_pdf = False
+            st.rerun()
+
+    if 'pdf_ready' in st.session_state:
+        city_slug = st.session_state.selected_city_name.split(',')[0].replace(' ', '_')
+        st.download_button(
+            label="⬇️ Download PDF Briefing",
+            data=st.session_state.pdf_ready,
+            file_name=f"Gaia_Briefing_{city_slug}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+
+    # Process Pending Map Clicks
+    if st.session_state.pending_map_click:
+        prompt = st.session_state.pending_map_click
+        st.session_state.pending_map_click = None
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt, unsafe_allow_html=True)
+            with st.chat_message("assistant"):
+                agent.process_custom_query(prompt)
+
+    # Generic Chat Input
+    if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt, unsafe_allow_html=True)
+            with st.chat_message("assistant"):
+                agent.process_custom_query(prompt)
+        st.rerun()
+
+# ==========================================
+# RIGHT COLUMN: THE BIOSPHERE (MAP & DATA)
+# ==========================================
+with col_map:
+    # Header Control Bar
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 1, 1, 1])
     
-    # Layer Controls
-    st.markdown("**Biosphere Layers**")
-    st.session_state.layer_toggles["thermal"] = st.toggle("Thermal Inversion (Landsat)", value=st.session_state.layer_toggles["thermal"])
-    st.session_state.layer_toggles["trees"] = st.toggle("Nature ID Canopy", value=st.session_state.layer_toggles["trees"])
-    st.session_state.layer_toggles["sensors"] = st.toggle("Sensor Grid (Violet)", value=st.session_state.layer_toggles["sensors"])
-
-    st.divider()
-    
-    # Streaming Logs
-    st.markdown("**Agent Logic Stream**")
-    log_container = st.container(height=300)
-    for log in st.session_state.logs:
-        log_container.markdown(f"**[{log['stage']}]** {log['message']} <span style='color:#94a3b8; font-size:0.8em;'>{log['time']}</span>", unsafe_allow_html=True)
-
-
-# --- MAIN AREA (THE BIOSPHERE) ---
-
-# Header
-col_head, col_metrics = st.columns([2, 1])
-with col_head:
-    st.title("Gaia Heat Sync")
-    st.markdown("Urbit-Style Resilience Cockpit for City Officers.")
-
-with col_metrics:
-    # Live Metrics
-    m1, m2 = st.columns(2)
-    m1.metric("Avg Surface Temp", "38.2°C", "1.2°C")
-    m2.metric("Active Agents", "1,204", "+8")
-
-# Map Visualization
-deck_map = create_map(
-    df_thermal, 
-    df_trees, 
-    df_sensors,
-    st.session_state.layer_toggles["thermal"],
-    st.session_state.layer_toggles["trees"],
-    st.session_state.layer_toggles["sensors"],
-    center_lat=CITIES[st.session_state.selected_city_name]['lat'],
-    center_lon=CITIES[st.session_state.selected_city_name]['lon']
-)
-
-st.pydeck_chart(deck_map)
-
-# --- INTERACTIVE COMPONENTS (THE SPINE) ---
-# Nature ID Drill Down (Simulated via Expander for now as PyDeck click events in Streamlit are tricky without complex callbacks)
-# In a full app, we'd capture pydeck_chart selection. Here we simulate "Latest Asset" inspection.
-
-if st.session_state.layer_toggles["trees"]:
-    st.markdown("### 🌳 Selected Nature Asset")
-    
-    # Mock selecting a random tree for demo purposes if none "clicked"
-    # In production: st.session_state.get('selected_tree_id')
-    selected_tree = df_trees.iloc[0] 
-    
-    col_card, col_trust = st.columns([2, 1])
-    
-    with col_card:
-        st.markdown(f"""
-        <div class="bio-card">
-            <h3>{selected_tree['species']}</h3>
-            <p><strong>ID:</strong> {selected_tree['tree_id']}</p>
-            <p><strong>Health:</strong> <span style="color: #059669;">{selected_tree['health']}</span></p>
-            <p><strong>Owner:</strong> {selected_tree['owner']}</p>
-        </div>
-        """, unsafe_allow_html=True)
+    with ctrl1:
+        # City Selector
+        selected_city = st.selectbox(
+            "📍 Active Bio-Region",
+            options=list(CITIES.keys()),
+            index=list(CITIES.keys()).index(st.session_state.selected_city_name),
+            label_visibility="collapsed"
+        )
+        if selected_city != st.session_state.selected_city_name:
+            st.session_state.selected_city_name = selected_city
+            coords = CITIES[selected_city]
+            with st.spinner(f"Establishing connection to {selected_city}..."):
+                st.session_state.data = generate_mock_data(coords['lat'], coords['lon'], st.session_state.time_of_day)
+            st.rerun()
+            
+    with ctrl2:
+        st.metric("Resilience Score", f"{resilience_score}/100", "+2 pts")
+    with ctrl3:
+        st.metric("Avg Surface Temp", f"{current_temp:.1f}°C", "Live")
+    with ctrl4:
+        st.metric("Air Quality Index", f"AQI {current_aqi}", "Live")
         
-    with col_trust:
-        st.markdown("""
-        <div class="bio-card" style="border-left: 4px solid #f59e0b;">
-            <div style="font-size: 0.8em; color: #64748b; margin-bottom: 4px;">VERIFIABLE DATA PROVENANCE</div>
-            <div style="font-weight: 600;">Status: Verified</div>
-            <div style="font-size: 0.8em; font-family: monospace; color: #64748b;">Source: Secure Enclave 002</div>
-            <div style="margin-top: 8px;">🛡️ <span style="color: #059669;">Signatures Valid</span></div>
-        </div>
-        """, unsafe_allow_html=True)
+    # --- TEMPORAL SLIDER ---
+    current_hour = int(st.session_state.time_of_day.split(":")[0])
+    time_val = st.slider("Temporal Heat Simulation", min_value=0, max_value=23, value=current_hour, format="%02d:00")
+    if time_val != current_hour:
+        st.session_state.time_of_day = f"{time_val:02d}:00"
+        coords = CITIES[st.session_state.selected_city_name]
+        with st.spinner(f"Simulating bio-region for {time_val:02d}:00..."):
+            st.session_state.data = generate_mock_data(coords['lat'], coords['lon'], st.session_state.time_of_day)
+        st.rerun()
 
+    # Map Visualization
+    deck_map = create_map(
+        df_thermal, 
+        df_trees,
+        df_water,
+        df_parks,
+        df_shelters,
+        df_fountains,
+        df_green_roofs,
+        df_gardens,
+        df_forests,
+        df_wetlands,
+        df_sensors,
+        df_ndvi,
+        df_albedo,
+        df_buildings,
+        df_traffic,
+        df_population,
+        st.session_state.layer_toggles["thermal"],
+        st.session_state.layer_toggles["trees"],
+        st.session_state.layer_toggles["water"],
+        st.session_state.layer_toggles["parks"],
+        st.session_state.layer_toggles["shelters"],
+        st.session_state.layer_toggles["fountains"],
+        st.session_state.layer_toggles["green_roofs"],
+        st.session_state.layer_toggles["gardens"],
+        st.session_state.layer_toggles["forests"],
+        st.session_state.layer_toggles["wetlands"],
+        st.session_state.layer_toggles["sensors"],
+        st.session_state.layer_toggles["ndvi"],
+        st.session_state.layer_toggles["albedo"],
+        st.session_state.layer_toggles["buildings"],
+        st.session_state.layer_toggles["traffic"],
+        st.session_state.layer_toggles["population"],
+        center_lat=CITIES[st.session_state.selected_city_name]['lat'],
+        center_lon=CITIES[st.session_state.selected_city_name]['lon']
+    )
+
+    selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object")
+    
+    if selection and selection.get("selection") and selection["selection"].get("objects"):
+        obj = selection["selection"]["objects"][0]
+        asset_id = obj.get('asset_id') or obj.get('sensor_id')
+        name = obj.get('name') or "Sensor Node"
+        asset_type = obj.get('type') or "System Telemetry"
+        
+        if asset_id and st.session_state.last_clicked_asset != asset_id:
+            st.session_state.last_clicked_asset = asset_id
+            st.session_state.pending_map_click = f"**[MAP EVENT]** I just clicked on: **{name}** (ID: `{asset_id}`, Type: `{asset_type}`). Analyze it for me."
+            st.rerun()
+
+    # --- LAYER TOGGLES ---
+    st.markdown("<p style='font-size: 0.8em; color: #10b981; margin-bottom: 0; margin-top: 10px;'>SATELLITE INDICES</p>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.session_state.layer_toggles["thermal"] = st.toggle("Thermal Heatmap", value=st.session_state.layer_toggles["thermal"])
+    with c2:
+        st.session_state.layer_toggles["ndvi"] = st.toggle("NDVI (Vegetation)", value=st.session_state.layer_toggles["ndvi"])
+    with c3:
+        st.session_state.layer_toggles["albedo"] = st.toggle("Albedo (Reflectance)", value=st.session_state.layer_toggles["albedo"])
+        
+    st.markdown("<p style='font-size: 0.8em; color: #10b981; margin-bottom: 0; margin-top: 10px;'>PHYSICAL SENSORS</p>", unsafe_allow_html=True)
+    st.session_state.layer_toggles["sensors"] = st.toggle("Air Quality Nodes", value=st.session_state.layer_toggles["sensors"])
+    
+    st.markdown("<p style='font-size: 0.8em; color: #ff0055; margin-bottom: 0; margin-top: 10px;'>URBAN DRIVERS & VULNERABILITY</p>", unsafe_allow_html=True)
+    d1, d2, d3 = st.columns(3)
+    with d1:
+        st.session_state.layer_toggles["population"] = st.toggle("Population Density", value=st.session_state.layer_toggles["population"])
+    with d2:
+        st.session_state.layer_toggles["buildings"] = st.toggle("Building Mass", value=st.session_state.layer_toggles["buildings"])
+    with d3:
+        st.session_state.layer_toggles["traffic"] = st.toggle("Traffic Arteries", value=st.session_state.layer_toggles["traffic"])
+        
+    st.markdown("<p style='font-size: 0.8em; color: #10b981; margin-bottom: 0; margin-top: 10px;'>NATURE ID ASSETS</p>", unsafe_allow_html=True)
+    n1, n2, n3 = st.columns(3)
+    with n1:
+        st.session_state.layer_toggles["trees"] = st.toggle("Tree Canopy", value=st.session_state.layer_toggles["trees"])
+        st.session_state.layer_toggles["forests"] = st.toggle("Urban Forests", value=st.session_state.layer_toggles["forests"])
+        st.session_state.layer_toggles["gardens"] = st.toggle("Community Gardens", value=st.session_state.layer_toggles["gardens"])
+    with n2:
+        st.session_state.layer_toggles["water"] = st.toggle("Water Sources", value=st.session_state.layer_toggles["water"])
+        st.session_state.layer_toggles["wetlands"] = st.toggle("Wetlands", value=st.session_state.layer_toggles["wetlands"])
+        st.session_state.layer_toggles["fountains"] = st.toggle("Drinking Fountains", value=st.session_state.layer_toggles["fountains"])
+    with n3:
+        st.session_state.layer_toggles["parks"] = st.toggle("Public Parks", value=st.session_state.layer_toggles["parks"])
+        st.session_state.layer_toggles["green_roofs"] = st.toggle("Green Roofs", value=st.session_state.layer_toggles["green_roofs"])
+        st.session_state.layer_toggles["shelters"] = st.toggle("Cooling Centers", value=st.session_state.layer_toggles["shelters"])
+
+    selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object")
+    
+    if selection and selection.get("selection") and selection["selection"].get("objects"):
+        obj = selection["selection"]["objects"][0]
+        asset_id = obj.get('asset_id') or obj.get('sensor_id')
+        name = obj.get('name') or "Sensor Node"
+        asset_type = obj.get('type') or "System Telemetry"
+        
+        if asset_id and st.session_state.last_clicked_asset != asset_id:
+            st.session_state.last_clicked_asset = asset_id
+            st.session_state.pending_map_click = f"**[MAP EVENT]** I just clicked on: **{name}** (ID: `{asset_id}`, Type: `{asset_type}`). Analyze it for me."
+            st.rerun()
