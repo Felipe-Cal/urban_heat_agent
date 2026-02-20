@@ -19,10 +19,10 @@ import numpy as np
 import pandas as pd
 import requests
 
-from modules.models import CityData
+from modules.models import CityData, BBox
 
-
-# ---------------------------------------------------------------------------
+# Configuration
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # OSM daily file-cache  (prevents cold-start timeouts on Streamlit Cloud)
 # ---------------------------------------------------------------------------
 _OSM_CACHE_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "heat_osm_cache")
@@ -54,13 +54,38 @@ def _save_osm_cache(key: str, data: dict) -> None:
 
 
 
-def _pm25_to_aqi(pm25: float) -> int:
-    breakpoints = [(0, 0, 12, 50), (12.1, 51, 35.4, 100), (35.5, 101, 55.4, 150),
-                   (55.5, 151, 150.4, 200), (150.5, 201, 250.4, 300), (250.5, 301, 500.4, 500)]
-    for bp_lo, i_lo, bp_hi, i_hi in breakpoints:
-        if bp_lo <= pm25 <= bp_hi:
-            return int(round((i_hi - i_lo) / (bp_hi - bp_lo) * (pm25 - bp_lo) + i_lo))
-    return min(500, max(0, int(round(pm25))))
+def _calculate_aqi(value: float, parameter: str) -> Optional[int]:
+    """
+    Convert raw pollutant values to US AQI based on EPA breakpoints.
+    Supports PM2.5, Ozone (ppm), NO2 (ppb), and PM10.
+    """
+    parameter = parameter.lower().replace(".", "")
+    if parameter == "pm25":
+        # PM2.5 (µg/m³)
+        bp = [(0, 0, 12, 50), (12.1, 51, 35.4, 100), (35.5, 101, 55.4, 150),
+              (55.5, 151, 150.4, 200), (150.5, 201, 250.4, 300), (250.5, 301, 500.4, 500)]
+    elif parameter == "o3":
+        # Ozone (ppm)
+        bp = [(0, 0, 0.054, 50), (0.055, 51, 0.070, 100), (0.071, 101, 0.085, 150),
+              (0.086, 151, 0.105, 200), (0.106, 201, 0.200, 300)]
+    elif parameter == "no2":
+        # NO2 (ppb)
+        bp = [(0, 0, 53, 50), (54, 51, 100, 100), (101, 101, 360, 150),
+              (361, 151, 649, 200)]
+    elif parameter == "pm10":
+        # PM10 (µg/m³)
+        bp = [(0, 0, 54, 50), (55, 51, 154, 100), (155, 101, 254, 150),
+              (255, 151, 354, 200), (355, 201, 424, 300)]
+    else:
+        return None
+
+    for blo, ilo, bhi, ihi in bp:
+        if blo <= value <= bhi:
+            return int(round((ihi - ilo) / (bhi - blo) * (value - blo) + ilo))
+    
+    if bp and value > bp[-1][2]:
+        return bp[-1][3]
+    return int(round(value)) if value >= 0 else 0
 
 
 def generate_mock_data(
@@ -69,6 +94,8 @@ def generate_mock_data(
     time_of_day: str = "14:00",
     progress_callback: Optional[Callable[[str, int], None]] = None,
     openaq_api_key: Optional[str] = None,
+    bbox: Optional[BBox] = None,
+    radius_meters: int = 2000,
 ) -> CityData:
     """
     Generate all map/dashboard data for a city snapshot.
@@ -120,12 +147,20 @@ def generate_mock_data(
         print(f"Error fetching Open-Meteo APIs: {e}")
 
     # Calculate Diurnal temporal shift based on the UI slider
-    try:
-        hour = int(time_of_day.split(":")[0])
-    except (ValueError, IndexError):
-        hour = 14
+    if hasattr(time_of_day, "hour"):
+        hour = time_of_day.hour
+        minute = time_of_day.minute
+    else:
+        try:
+            h_str, m_str = time_of_day.split(":")
+            hour = int(h_str)
+            minute = int(m_str)
+        except (ValueError, IndexError):
+            hour, minute = 14, 0
 
-    temp_variation = -5.0 * np.cos((hour - 4) * np.pi / 11.0)
+    # Precise fractional hour
+    fractional_hour = hour + (minute / 60.0)
+    temp_variation = -5.0 * np.cos((fractional_hour - 4) * np.pi / 11.0)
     
     # We will compute the final `current_temp` directly from the thermal grid 
     # if it loads successfully, ensuring the UI perfectly matches the true Local Surface Temp.
@@ -139,11 +174,15 @@ def generate_mock_data(
     
     # 10x10 grid (~3km radius total)
     steps = 10
-    lat_step = 0.006  # ~670m
-    lon_step = 0.006
-    
-    start_lat = center_lat - (lat_step * steps / 2)
-    start_lon = center_lon - (lon_step * steps / 2)
+    if bbox:
+        start_lat, start_lon = bbox.min_lat, bbox.min_lon
+        lat_step = (bbox.max_lat - bbox.min_lat) / steps
+        lon_step = (bbox.max_lon - bbox.min_lon) / steps
+    else:
+        lat_step = 0.006  # ~670m
+        lon_step = 0.006
+        start_lat = center_lat - (lat_step * steps / 2)
+        start_lon = center_lon - (lon_step * steps / 2)
     
     lats = []
     lons = []
@@ -157,6 +196,8 @@ def generate_mock_data(
     lons_str = ",".join(map(str, lons))
     
     thermal_cache_key = f"thermal_{_cache_key(center_lat, center_lon)}"
+    if bbox:
+        thermal_cache_key += f"_{bbox.min_lat:.4f}_{bbox.min_lon:.4f}_{bbox.max_lat:.4f}_{bbox.max_lon:.4f}"
     cached_thermal = _load_osm_cache(thermal_cache_key)
     
     max_theoretical_temp = 50.0
@@ -250,34 +291,41 @@ def generate_mock_data(
 
     _progress("Fetching OpenStreetMap infrastructure...", 30)
     try:
-        radius_meters = 1500
-        overpass_url = "http://overpass-api.de/api/interpreter"
+        if bbox:
+            area_filter = f"({bbox.to_overpass_str()})"
+            building_radius = "" # use full bbox
+        else:
+            area_filter = f"(around:{radius_meters},{center_lat},{center_lon})"
+            building_radius = f"(around:{radius_meters // 2},{center_lat},{center_lon})"
+
         query = f"""
         [out:json][timeout:25];
         (
-          node["natural"="tree"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["natural"="water"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["leisure"="park"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["amenity"~"shelter|community_centre"](around:{radius_meters},{center_lat},{center_lon});
-          node["amenity"="drinking_water"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["green_roof"="yes"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["roof:material"="grass"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["landuse"="allotments"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["leisure"="garden"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["landuse"="forest"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["natural"="wood"](around:{radius_meters},{center_lat},{center_lon});
-          nwr["natural"="wetland"](around:{radius_meters},{center_lat},{center_lon});
-          way["building"](around:{radius_meters // 2},{center_lat},{center_lon});
-          way["highway"~"motorway|trunk|primary"](around:{radius_meters},{center_lat},{center_lon});
+          node["natural"="tree"]{area_filter};
+          nwr["natural"="water"]{area_filter};
+          nwr["leisure"="park"]{area_filter};
+          nwr["amenity"~"shelter|community_centre"]{area_filter};
+          node["amenity"="drinking_water"]{area_filter};
+          nwr["green_roof"="yes"]{area_filter};
+          nwr["roof:material"="grass"]{area_filter};
+          nwr["landuse"="allotments"]{area_filter};
+          nwr["leisure"="garden"]{area_filter};
+          nwr["landuse"="forest"]{area_filter};
+          nwr["natural"="wood"]{area_filter};
+          nwr["natural"="wetland"]{area_filter};
+          way["building"]{building_radius if not bbox else area_filter};
+          way["highway"~"motorway|trunk|primary"]{area_filter};
         );
         out geom;
         """
         # --- Cache: skip expensive Overpass call if we have today's data ---
         osm_cache_key = _cache_key(center_lat, center_lon)
+        if bbox:
+            osm_cache_key += f"_{bbox.min_lat:.4f}_{bbox.min_lon:.4f}_{bbox.max_lat:.4f}_{bbox.max_lon:.4f}"
         osm_data = _load_osm_cache(osm_cache_key)
 
         if osm_data is None:
-            response = requests.get(overpass_url, params={"data": query}, timeout=25)
+            response = requests.get(OVERPASS_URL, params={"data": query}, timeout=25)
             if response.status_code == 200:
                 osm_data = response.json()
                 _save_osm_cache(osm_cache_key, osm_data)
@@ -409,16 +457,16 @@ def generate_mock_data(
                 "type": "Tree Canopy",
                 "health": "Verified",
                 "owner": "Public",
-                "color": [5, 150, 105, 200],
+                "color": "rgba(5, 150, 105, 0.8)",
                 "tooltip": _asset_tooltip(species, "TREE", element["id"], "Tree Canopy", impact_html),
             })
 
-        process_assets(water, water_data, "WATER", "Water Body", "Water Resource", [14, 165, 233, 200], 500)
-        process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", [132, 204, 22, 200], 500)
-        process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", [163, 230, 53, 200], 200)
-        process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", [77, 124, 15, 200], 300)
-        process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", [21, 128, 61, 200], 200)
-        process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", [12, 74, 110, 200], 100)
+        process_assets(water, water_data, "WATER", "Water Body", "Water Resource", "rgba(14, 165, 233, 0.8)", 500)
+        process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", "rgba(132, 204, 22, 0.8)", 500)
+        process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", "rgba(163, 230, 53, 0.8)", 200)
+        process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", "rgba(77, 124, 15, 0.8)", 300)
+        process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", "rgba(21, 128, 61, 0.8)", 200)
+        process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", "rgba(12, 74, 110, 0.8)", 100)
 
         # Shelters — rich tag extraction (opening hours, capacity, AC, address)
         for element in shelters[:200]:
@@ -434,7 +482,7 @@ def generate_mock_data(
                 "type": "Emergency Shelter",
                 "health": "Verified",
                 "owner": tags.get("operator", "Public"),
-                "color": [245, 158, 11, 200],
+                "color": "rgba(245, 158, 11, 0.8)",
                 "tooltip": _shelter_tooltip(name, element["id"], tags),
             })
 
@@ -452,7 +500,7 @@ def generate_mock_data(
                 "type": "Hydration Access",
                 "health": "Verified",
                 "owner": tags.get("operator", "Public"),
-                "color": [56, 189, 248, 200],
+                "color": "rgba(56, 189, 248, 0.8)",
                 "tooltip": _fountain_tooltip(name, element["id"], tags),
             })
 
@@ -468,7 +516,9 @@ def generate_mock_data(
     # 4. Air quality sensor nodes  (real locations from OpenAQ v3)
     # -------------------------------------------------------------------------
     _progress("Connecting to OpenAQ sensor network...", 75)
-    sensor_data = _fetch_openaq_sensors(center_lat, center_lon, current_aqi, openaq_api_key=openaq_api_key)
+    sensor_data, oaq_error = _fetch_openaq_sensors(center_lat, center_lon, current_aqi, openaq_api_key=openaq_api_key)
+    if oaq_error:
+        fetch_error = f"{fetch_error}\n{oaq_error}" if fetch_error else oaq_error
 
     _progress("Generating bio-regional data structures...", 90)
 
@@ -522,13 +572,19 @@ def _fetch_openaq_sensors(
     center_lon: float,
     base_aqi: int,
     radius_m: int = 25_000,
-    limit: int = 25,
+    limit: int = 50,
     openaq_api_key: Optional[str] = None,
-) -> list:
+) -> tuple[list, Optional[str]]:
+    """
+    Fetch real sensor stations from OpenAQ v3. 
+    Filters for stations updated in the last 60 days to ensure active data.
+    """
+    error_msg = None
     try:
         headers = {"accept": "application/json"}
         if openaq_api_key:
             headers["X-API-Key"] = openaq_api_key
+        
         resp = requests.get(
             "https://api.openaq.org/v3/locations",
             params={
@@ -539,53 +595,103 @@ def _fetch_openaq_sensors(
             headers=headers,
             timeout=8,
         )
+        
+        if resp.status_code == 401:
+            return [], "🔑 OpenAQ: Invalid API Key. Check secrets.toml."
+        if resp.status_code == 429:
+            return [], "🚦 OpenAQ: Rate limited. Please try again later."
         if resp.status_code != 200:
             print(f"OpenAQ returned status {resp.status_code}")
-            return []
+            return [], f"🌐 OpenAQ API Error ({resp.status_code})."
+
         sensor_data = []
-        for loc in resp.json().get("results", []):
+        results = resp.json().get("results", [])
+        
+        # Filter for active stations (last updated within 60 days)
+        now = datetime.utcnow()
+        active_results = []
+        for loc in results:
+            dt_last = (loc.get("datetimeLast") or {}).get("utc")
+            if not dt_last:
+                continue
+            try:
+                # Remove Z and parse
+                ts = datetime.fromisoformat(dt_last.replace("Z", "+00:00"))
+                delta = now - ts.replace(tzinfo=None)
+                if delta.days < 60:
+                    active_results.append(loc)
+            except Exception:
+                pass
+        
+        # Fallback to all results if no active found in radius
+        if not active_results:
+            active_results = results[:10]
+
+        for loc in active_results[:25]:
             coords = loc.get("coordinates", {})
-            lat = coords.get("latitude")
-            lon = coords.get("longitude")
+            lat, lon = coords.get("latitude"), coords.get("longitude")
             if lat is None or lon is None:
                 continue
+            
             loc_id = loc.get("id")
-            sensor_id = f"OAQ-{loc_id}" if loc_id is not None else f"OAQ-{_make_sensor_id()}"
-            local_aqi = max(0, base_aqi)
+            sensor_id = f"OAQ-{loc_id}"
+            local_aqi = base_aqi
+            pollutant = "Synthesized"
+
             if openaq_api_key and loc_id is not None:
                 try:
                     latest_resp = requests.get(
                         f"https://api.openaq.org/v3/locations/{loc_id}/latest",
-                        params={"limit": 10},
                         headers=headers,
                         timeout=5,
                     )
                     if latest_resp.status_code == 200:
-                        results = latest_resp.json().get("results", [])
-                        for r in results:
-                            v = r.get("value")
-                            if v is not None and 0 <= v <= 1000:
-                                local_aqi = _pm25_to_aqi(float(v))
+                        l_results = latest_resp.json().get("results", [])
+                        
+                        # Map sensorsId to parameter info from the location object
+                        sensor_map = {s.get("id"): (s.get("parameter") or {}).get("name") for s in loc.get("sensors", []) if s.get("id")}
+                        
+                        # Collect results by parameter name
+                        results_by_param = {}
+                        for r in l_results:
+                            s_id = r.get("sensorsId")
+                            p_name = sensor_map.get(s_id)
+                            if p_name:
+                                results_by_param[p_name] = r
+                        
+                        # Prioritize pollutants: pm25 > pm2.5 > o3 > no2 > pm10
+                        target_param = None
+                        for p in ["pm25", "pm2.5", "o3", "no2", "pm10"]:
+                            if p in results_by_param:
+                                target_param = p
                                 break
+                        
+                        if target_param:
+                            target = results_by_param[target_param]
+                            v = target.get("value")
+                            if v is not None:
+                                calculated = _calculate_aqi(float(v), target_param)
+                                if calculated is not None:
+                                    local_aqi = calculated
+                                    pollutant = target_param.upper()
                 except Exception:
                     pass
-            if local_aqi < 50:
-                color = [16, 185, 129, 200]
-            elif local_aqi < 100:
-                color = [245, 158, 11, 200]
-            else:
-                color = [239, 68, 68, 200]
+
+            color = "rgba(16, 185, 129, 0.8)" if local_aqi < 50 else \
+                    "rgba(245, 158, 11, 0.8)" if local_aqi < 100 else "rgba(239, 68, 68, 0.8)"
+            
             sensor_data.append({
                 "lon": lon, "lat": lat,
                 "sensor_id": sensor_id,
                 "aqi": local_aqi,
+                "pollutant": pollutant,
                 "color": color,
-                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
+                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon, pollutant),
             })
-        return sensor_data
+        return sensor_data, None
     except Exception as e:
         print(f"OpenAQ fetch failed: {e}")
-        return []
+        return [], "📡 OpenAQ fetch failed (check connection)."
 
 
 def _make_sensor_id() -> str:
@@ -688,12 +794,13 @@ def _fountain_tooltip(name: str, element_id, tags: dict) -> str:
     return "".join(parts)
 
 
-def _sensor_tooltip(sensor_id: str, aqi: int, lat: float, lon: float) -> str:
+def _sensor_tooltip(sensor_id: str, aqi: int, lat: float, lon: float, pollutant: str = "PM2.5") -> str:
     return (
         f"<b style='font-size: 14px; color: #00e5ff;'>Air Quality Node</b>"
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
         f"ID: {sensor_id}</span><br/><br/>"
-        f"<b>US AQI:</b> <span style='font-size: 14px; font-weight:bold;'>{aqi}</span>"
+        f"<b>Main Pollutant:</b> {pollutant}<br/>"
+        f"<b>Calculated AQI:</b> <span style='font-size: 14px; font-weight:bold;'>{aqi}</span>"
         f"<br/><span style='color:#94a3b8; font-size:11px;'>Lat: {lat:.4f} | Lon: {lon:.4f}</span>"
     )
 

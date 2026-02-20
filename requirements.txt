@@ -8,3 +8,4 @@ markdown-pdf==1.13.1
 supabase>=2.10.0
 httpx>=0.26.0
 websockets>=14,<16
+extra-streamlit-components==0.1.71

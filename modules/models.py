@@ -9,6 +9,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pandas as pd
+from typing import Optional
+
+
+@dataclass
+class BBox:
+    """Bounding box coordinates for map viewport."""
+    min_lat: float
+    min_lon: float
+    max_lat: float
+    max_lon: float
+
+    def to_overpass_str(self) -> str:
+        """Returns bounds in (minlat, minlon, maxlat, maxlon) format for Overpass."""
+        return f"{self.min_lat},{self.min_lon},{self.max_lat},{self.max_lon}"
 
 
 @dataclass
@@ -82,4 +96,5 @@ class MapConfig:
     toggles: LayerToggles
     center_lat: float = 34.0522
     center_lon: float = -118.2437
+    bbox: Optional[BBox] = None
     simulations: list = field(default_factory=list)
