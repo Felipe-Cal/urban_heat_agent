@@ -14,6 +14,7 @@ import re
 import string
 from datetime import date, datetime, time as dtime
 from typing import Callable, Optional
+import concurrent.futures
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,111 @@ def _save_osm_cache(key: str, data: dict) -> None:
         pass
 
 
+def _fetch_meteo_temp(center_lat: float, center_lon: float) -> float:
+    try:
+        meteo_url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={center_lat}&longitude={center_lon}&current=temperature_2m"
+        )
+        meteo_resp = requests.get(meteo_url, timeout=5)
+        if meteo_resp.status_code == 200:
+            return float(
+                meteo_resp.json().get("current", {}).get("temperature_2m", 30.0)
+            )
+    except Exception as e:
+        print(f"Error fetching Open-Meteo Temp: {e}")
+    return 30.0
+
+
+def _fetch_meteo_aqi(center_lat: float, center_lon: float) -> int:
+    try:
+        aqi_url = (
+            f"https://air-quality-api.open-meteo.com/v1/air-quality"
+            f"?latitude={center_lat}&longitude={center_lon}&current=us_aqi"
+        )
+        aqi_resp = requests.get(aqi_url, timeout=5)
+        if aqi_resp.status_code == 200:
+            return int(
+                aqi_resp.json().get("current", {}).get("us_aqi", 45)
+            )
+    except Exception as e:
+        print(f"Error fetching Open-Meteo AQI: {e}")
+    return 45
+
+
+def _fetch_thermal_grid(
+    lats_str: str,
+    lons_str: str,
+    center_lat: float,
+    center_lon: float,
+    current_temp: float,
+    expected_count: int
+) -> Optional[list[float]]:
+    thermal_cache_key = f"thermal_{_cache_key(center_lat, center_lon)}"
+    cached_thermal = _load_osm_cache(thermal_cache_key)
+
+    if cached_thermal and len(cached_thermal) == expected_count:
+        return [pt["temp"] for pt in cached_thermal]
+
+    try:
+        thermal_url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lats_str}&longitude={lons_str}"
+            f"&current=soil_temperature_0cm&temperature_unit=celsius"
+        )
+        thermal_resp = requests.get(thermal_url, timeout=10)
+        if thermal_resp.status_code == 200:
+            results = thermal_resp.json()
+            cache_payload = []
+            raw_temps = []
+            for i, res in enumerate(results):
+                t = res.get("current", {}).get("soil_temperature_0cm")
+                if t is None:
+                    t = current_temp
+                cache_payload.append({"temp": t})
+                raw_temps.append(t)
+            _save_osm_cache(thermal_cache_key, cache_payload)
+            return raw_temps
+        else:
+            raise Exception(f"Thermal API returned {thermal_resp.status_code}")
+
+    except Exception as e:
+        print(f"Error fetching real thermal grid: {e}. Falling back to synthetic.")
+        return None
+
+
+def _fetch_osm_data(query: str, center_lat: float, center_lon: float) -> tuple[dict, Optional[str]]:
+    osm_cache_key = _cache_key(center_lat, center_lon)
+    osm_data = _load_osm_cache(osm_cache_key)
+    fetch_error = None
+
+    if osm_data is None:
+        try:
+            overpass_url = "http://overpass-api.de/api/interpreter"
+            response = requests.get(overpass_url, params={"data": query}, timeout=25)
+            if response.status_code == 200:
+                osm_data = response.json()
+                _save_osm_cache(osm_cache_key, osm_data)
+            else:
+                print(f"Warning: Overpass API returned status {response.status_code}")
+                if response.status_code == 504:
+                    fetch_error = "\u23f3 OpenStreetMap Gateway Timeout (504). The query was too large."
+                elif response.status_code == 429:
+                    fetch_error = "\u26a0\ufe0f OpenStreetMap rate-limited (429). Map loaded without Nature ID assets."
+                else:
+                    fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {response.status_code}."
+                osm_data = {"elements": []}
+        except requests.exceptions.Timeout:
+            print("Error: Overpass API request timed out after 25 seconds.")
+            fetch_error = "⏳ OpenStreetMap API response timed out. Map rendered using fallback data."
+            osm_data = {"elements": []}
+        except Exception as e:
+            print(f"Error fetching OSM data: {e}")
+            fetch_error = "🛑 Network Error fetching OpenStreetMap data. Check your connection."
+            osm_data = {"elements": []}
+
+    return osm_data, fetch_error
+
 
 def generate_mock_data(
     center_lat: float = 34.0522,
@@ -80,184 +186,57 @@ def generate_mock_data(
     _progress("Initializing orbital thermal imaging...", 10)
 
     # -------------------------------------------------------------------------
-    # 1. Live temperature + AQI from Open-Meteo
+    # 1. Live temperature + AQI from Open-Meteo (Parallel Fetch)
     # -------------------------------------------------------------------------
-    current_temp: float = 30.0  # Fallback
-    current_aqi: int = 45       # Fallback
     fetch_error: Optional[str] = None
-
-    try:
-        meteo_url = (
-            f"https://api.open-meteo.com/v1/forecast"
-            f"?latitude={center_lat}&longitude={center_lon}&current=temperature_2m"
-        )
-        meteo_resp = requests.get(meteo_url, timeout=5)
-        if meteo_resp.status_code == 200:
-            current_temp = float(
-                meteo_resp.json().get("current", {}).get("temperature_2m", 30.0)
-            )
-
-        aqi_url = (
-            f"https://air-quality-api.open-meteo.com/v1/air-quality"
-            f"?latitude={center_lat}&longitude={center_lon}&current=us_aqi"
-        )
-        aqi_resp = requests.get(aqi_url, timeout=5)
-        if aqi_resp.status_code == 200:
-            current_aqi = int(
-                aqi_resp.json().get("current", {}).get("us_aqi", 45)
-            )
-    except Exception as e:
-        print(f"Error fetching Open-Meteo APIs: {e}")
-
-    # Diurnal temperature variation (min at ~4am, max at ~3pm; ~10°C swing)
-    try:
-        hour = int(time_of_day.split(":")[0])
-    except (ValueError, IndexError):
-        hour = 14
-
-    temp_variation = -5.0 * np.cos((hour - 4) * np.pi / 11.0)
-    current_temp += temp_variation
-
-    if hour in [7, 8, 9, 16, 17, 18]:
-        current_aqi += random.randint(10, 20)
-    elif hour < 6 or hour > 20:
-        current_aqi = max(0, current_aqi - random.randint(5, 15))
-
-    # -------------------------------------------------------------------------
-    # 2. Real thermal surface temperature (Open-Meteo LST grid)
-    # -------------------------------------------------------------------------
-    _progress("Acquiring Land Surface Temperature (LST) data...", 20)
-    thermal_data = []
     
-    # 10x10 grid (~3km radius total)
-    steps = 10
-    lat_step = 0.006  # ~670m
-    lon_step = 0.006
-    
-    start_lat = center_lat - (lat_step * steps / 2)
-    start_lon = center_lon - (lon_step * steps / 2)
-    
-    lats = []
-    lons = []
-    for i in range(steps):
-        for j in range(steps):
-            lats.append(round(start_lat + i * lat_step, 6))
-            lons.append(round(start_lon + j * lon_step, 6))
-            
-    # Open-Meteo multi-point format: latitude=a,b,c&longitude=x,y,z
-    lats_str = ",".join(map(str, lats))
-    lons_str = ",".join(map(str, lons))
-    
-    thermal_cache_key = f"thermal_{_cache_key(center_lat, center_lon)}"
-    cached_thermal = _load_osm_cache(thermal_cache_key)
-    
-    max_theoretical_temp = 50.0
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Stage 1: Basic Meteo Data
+        future_temp = executor.submit(_fetch_meteo_temp, center_lat, center_lon)
+        future_aqi = executor.submit(_fetch_meteo_aqi, center_lat, center_lon)
 
-    if cached_thermal and len(cached_thermal) == len(lats):
-        _progress("Loaded thermal grid from cache...", 25)
-        raw_temps = [pt["temp"] for pt in cached_thermal]
-    else:
+        current_temp = future_temp.result()
+        current_aqi = future_aqi.result()
+
+        # Diurnal temperature variation (min at ~4am, max at ~3pm; ~10°C swing)
         try:
-            thermal_url = (
-                f"https://api.open-meteo.com/v1/forecast"
-                f"?latitude={lats_str}&longitude={lons_str}"
-                f"&current=soil_temperature_0cm&temperature_unit=celsius"
-            )
-            thermal_resp = requests.get(thermal_url, timeout=10)
-            if thermal_resp.status_code == 200:
-                results = thermal_resp.json()
-                cache_payload = []
-                raw_temps = []
-                for i, res in enumerate(results):
-                    t = res.get("current", {}).get("soil_temperature_0cm") 
-                    if t is None:
-                        t = current_temp
-                    cache_payload.append({"temp": t})
-                    raw_temps.append(t)
-                _save_osm_cache(thermal_cache_key, cache_payload)
-            else:
-                raise Exception(f"Thermal API returned {thermal_resp.status_code}")
-                
-        except Exception as e:
-            print(f"Error fetching real thermal grid: {e}. Falling back to synthetic.")
-            raw_temps = None
+            hour = int(time_of_day.split(":")[0])
+        except (ValueError, IndexError):
+            hour = 14
 
-    if raw_temps:
-        # Interpolate the rigid 10x10 grid onto a 1500-point random scatter 
-        # using Inverse Distance Weighting (IDW) to create a smooth, organic heatmap
-        grid_pts = np.column_stack((lats, lons))
-        temps_arr = np.array(raw_temps)
-        
-        num_interp_points = 1500
-        min_lat, max_lat = min(lats), max(lats)
-        min_lon, max_lon = min(lons), max(lons)
-        
-        rand_lats = np.random.uniform(min_lat, max_lat, num_interp_points)
-        rand_lons = np.random.uniform(min_lon, max_lon, num_interp_points)
-        rand_pts = np.column_stack((rand_lats, rand_lons))
-        
-        # Broadcasting to find distances (1500 x 100)
-        rand_pts_exp = rand_pts[:, np.newaxis, :]
-        grid_pts_exp = grid_pts[np.newaxis, :, :]
-        
-        dist_sq = np.sum((rand_pts_exp - grid_pts_exp) ** 2, axis=2)
-        dist_sq[dist_sq == 0] = 1e-10  # prevent div by zero
-        weights = 1.0 / dist_sq
-        
-        interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
-        
-        for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
-            # Add micro-variation to break contour banding
-            t += random.uniform(-0.3, 0.3)
-            weight = max(0.1, t / max_theoretical_temp)
-            thermal_data.append([r_lon, r_lat, weight])
-    else:
-        # Fallback to sparse synthetic grid
-        for _ in range(300):
-                lat = center_lat + np.random.normal(0, 0.02)
-                lon = center_lon + np.random.normal(0, 0.02)
-                distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-                uhi_effect = max(0.0, 8 - distance * 200)
-                temp = current_temp + random.uniform(0, uhi_effect)
-                weight = max(0.1, temp / max_theoretical_temp)
-                thermal_data.append([lon, lat, weight])
+        temp_variation = -5.0 * np.cos((hour - 4) * np.pi / 11.0)
+        current_temp += temp_variation
 
-    df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
+        if hour in [7, 8, 9, 16, 17, 18]:
+            current_aqi += random.randint(10, 20)
+        elif hour < 6 or hour > 20:
+            current_aqi = max(0, current_aqi - random.randint(5, 15))
 
-    # -------------------------------------------------------------------------
-    # 2b. Synthetic population density
-    # -------------------------------------------------------------------------
-    population_data = []
-    for _ in range(300):
-        p_lat = center_lat + np.random.normal(0, 0.025)
-        p_lon = center_lon + np.random.normal(0, 0.025)
-        distance = np.sqrt((p_lat - center_lat) ** 2 + (p_lon - center_lon) ** 2)
-        weight = max(10, 100 - distance * 3500) + random.randint(0, 20)
-        population_data.append({"lat": p_lat, "lon": p_lon, "weight": weight})
-
-    # -------------------------------------------------------------------------
-    # 3. OpenStreetMap — real nature + infrastructure assets
-    # -------------------------------------------------------------------------
-    tree_data: list = []
-    water_data: list = []
-    park_data: list = []
-    shelter_data: list = []
-    fountain_data: list = []
-    green_roof_data: list = []
-    garden_data: list = []
-    forest_data: list = []
-    wetland_data: list = []
-    building_data: list = []
-    traffic_data: list = []
-
-    # Initialise raw element lists (used later for resilience score)
-    trees, water, parks, shelters, fountains = [], [], [], [], []
-    green_roofs, gardens, forests, wetlands = [], [], [], []
-
-    _progress("Fetching OpenStreetMap infrastructure...", 30)
-    try:
+        # -------------------------------------------------------------------------
+        # Prepare for Stage 2
+        # -------------------------------------------------------------------------
+        
+        _progress("Acquiring Land Surface Temperature (LST) data...", 20)
+        
+        # Thermal Grid Params
+        steps = 10
+        lat_step = 0.006  # ~670m
+        lon_step = 0.006
+        start_lat = center_lat - (lat_step * steps / 2)
+        start_lon = center_lon - (lon_step * steps / 2)
+        
+        lats = []
+        lons = []
+        for i in range(steps):
+            for j in range(steps):
+                lats.append(round(start_lat + i * lat_step, 6))
+                lons.append(round(start_lon + j * lon_step, 6))
+        
+        lats_str = ",".join(map(str, lats))
+        lons_str = ",".join(map(str, lons))
+        
+        # OSM Query
         radius_meters = 1500
-        overpass_url = "http://overpass-api.de/api/interpreter"
         query = f"""
         [out:json][timeout:25];
         (
@@ -278,26 +257,100 @@ def generate_mock_data(
         );
         out geom;
         """
-        # --- Cache: skip expensive Overpass call if we have today's data ---
-        osm_cache_key = _cache_key(center_lat, center_lon)
-        osm_data = _load_osm_cache(osm_cache_key)
 
-        if osm_data is None:
-            response = requests.get(overpass_url, params={"data": query}, timeout=25)
-            if response.status_code == 200:
-                osm_data = response.json()
-                _save_osm_cache(osm_cache_key, osm_data)
-            else:
-                print(f"Warning: Overpass API returned status {response.status_code}")
-                if response.status_code == 504:
-                    fetch_error = "\u23f3 OpenStreetMap Gateway Timeout (504). The query was too large."
-                elif response.status_code == 429:
-                    fetch_error = "\u26a0\ufe0f OpenStreetMap rate-limited (429). Map loaded without Nature ID assets."
-                else:
-                    fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {response.status_code}."
-                osm_data = {"elements": []}
+        # Stage 2: Heavy Lifting (Thermal, OSM, OpenAQ)
+        _progress("Fetching OpenStreetMap infrastructure...", 30)
+
+        future_thermal = executor.submit(
+            _fetch_thermal_grid, lats_str, lons_str, center_lat, center_lon, current_temp, len(lats)
+        )
+        future_osm = executor.submit(
+            _fetch_osm_data, query, center_lat, center_lon
+        )
+        future_openaq = executor.submit(
+            _fetch_openaq_sensors, center_lat, center_lon, current_aqi
+        )
+
+        # Process Thermal
+        raw_temps = future_thermal.result()
+        thermal_data = []
+        max_theoretical_temp = 50.0
+
+        if raw_temps:
+            # Interpolate the rigid 10x10 grid onto a 1500-point random scatter
+            # using Inverse Distance Weighting (IDW) to create a smooth, organic heatmap
+            grid_pts = np.column_stack((lats, lons))
+            temps_arr = np.array(raw_temps)
+
+            num_interp_points = 1500
+            min_lat, max_lat = min(lats), max(lats)
+            min_lon, max_lon = min(lons), max(lons)
+
+            rand_lats = np.random.uniform(min_lat, max_lat, num_interp_points)
+            rand_lons = np.random.uniform(min_lon, max_lon, num_interp_points)
+            rand_pts = np.column_stack((rand_lats, rand_lons))
+
+            # Broadcasting to find distances (1500 x 100)
+            rand_pts_exp = rand_pts[:, np.newaxis, :]
+            grid_pts_exp = grid_pts[np.newaxis, :, :]
+
+            dist_sq = np.sum((rand_pts_exp - grid_pts_exp) ** 2, axis=2)
+            dist_sq[dist_sq == 0] = 1e-10  # prevent div by zero
+            weights = 1.0 / dist_sq
+
+            interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
+
+            for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
+                # Add micro-variation to break contour banding
+                t += random.uniform(-0.3, 0.3)
+                weight = max(0.1, t / max_theoretical_temp)
+                thermal_data.append([r_lon, r_lat, weight])
         else:
-            _progress("Loaded from local cache...", 50)
+            # Fallback to sparse synthetic grid
+            for _ in range(300):
+                    lat = center_lat + np.random.normal(0, 0.02)
+                    lon = center_lon + np.random.normal(0, 0.02)
+                    distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
+                    uhi_effect = max(0.0, 8 - distance * 200)
+                    temp = current_temp + random.uniform(0, uhi_effect)
+                    weight = max(0.1, temp / max_theoretical_temp)
+                    thermal_data.append([lon, lat, weight])
+
+        df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
+
+        # Synthetic Population (depends on building data later, but initial calc was synthetic)
+        population_data = []
+        for _ in range(300):
+            p_lat = center_lat + np.random.normal(0, 0.025)
+            p_lon = center_lon + np.random.normal(0, 0.025)
+            distance = np.sqrt((p_lat - center_lat) ** 2 + (p_lon - center_lon) ** 2)
+            weight = max(10, 100 - distance * 3500) + random.randint(0, 20)
+            population_data.append({"lat": p_lat, "lon": p_lon, "weight": weight})
+
+        # Process OSM
+        # Wait for OSM result
+        osm_data, fetch_error = future_osm.result()
+
+        _progress("Processing geospatial elements...", 50)
+
+        # -------------------------------------------------------------------------
+        # 3. OpenStreetMap — real nature + infrastructure assets
+        # -------------------------------------------------------------------------
+        tree_data: list = []
+        water_data: list = []
+        park_data: list = []
+        shelter_data: list = []
+        fountain_data: list = []
+        green_roof_data: list = []
+        garden_data: list = []
+        forest_data: list = []
+        wetland_data: list = []
+        building_data: list = []
+        traffic_data: list = []
+
+        # Initialise raw element lists (used later for resilience score)
+        trees, water, parks, shelters, fountains = [], [], [], [], []
+        green_roofs, gardens, forests, wetlands = [], [], [], []
 
         # --- Process elements regardless of whether data came from cache or API ---
         def get_coords(el: dict):
@@ -315,8 +368,6 @@ def generate_mock_data(
             if "center" in el:
                 return el["center"]["lat"], el["center"]["lon"]
             return None, None
-
-        _progress("Processing geospatial elements...", 50)
 
         elements = osm_data.get("elements", [])
         trees = [e for e in elements if e.get("tags", {}).get("natural") == "tree"]
@@ -476,39 +527,31 @@ def generate_mock_data(
                 "tooltip": _fountain_tooltip(name, element["id"], tags),
             })
 
+        # Process OpenAQ
+        sensor_data = future_openaq.result()
+        _progress("Connecting to OpenAQ sensor network...", 75)
+        if not sensor_data:
+            # Fallback: synthetic locations when OpenAQ is unavailable
+            for _ in range(25):
+                lat = center_lat + np.random.normal(0, 0.03)
+                lon = center_lon + np.random.normal(0, 0.03)
+                sensor_id = _make_sensor_id()
+                local_aqi = max(0, current_aqi + random.randint(-15, 25))
+                if local_aqi < 50:
+                    color = [16, 185, 129, 200]   # Emerald
+                elif local_aqi < 100:
+                    color = [245, 158, 11, 200]   # Amber
+                else:
+                    color = [239, 68, 68, 200]    # Red
+                sensor_data.append({
+                    "lon": lon, "lat": lat,
+                    "sensor_id": sensor_id,
+                    "aqi": local_aqi,
+                    "color": color,
+                    "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
+                })
 
-    except requests.exceptions.Timeout:
-        print("Error: Overpass API request timed out after 25 seconds.")
-        fetch_error = "⏳ OpenStreetMap API response timed out. Map rendered using fallback data."
-    except Exception as e:
-        print(f"Error fetching OSM data: {e}")
-        fetch_error = "🛑 Network Error fetching OpenStreetMap data. Check your connection."
-
-    # -------------------------------------------------------------------------
-    # 4. Air quality sensor nodes  (real locations from OpenAQ v3)
-    # -------------------------------------------------------------------------
-    _progress("Connecting to OpenAQ sensor network...", 75)
-    sensor_data = _fetch_openaq_sensors(center_lat, center_lon, current_aqi)
-    if not sensor_data:
-        # Fallback: synthetic locations when OpenAQ is unavailable
-        for _ in range(25):
-            lat = center_lat + np.random.normal(0, 0.03)
-            lon = center_lon + np.random.normal(0, 0.03)
-            sensor_id = _make_sensor_id()
-            local_aqi = max(0, current_aqi + random.randint(-15, 25))
-            if local_aqi < 50:
-                color = [16, 185, 129, 200]   # Emerald
-            elif local_aqi < 100:
-                color = [245, 158, 11, 200]   # Amber
-            else:
-                color = [239, 68, 68, 200]    # Red
-            sensor_data.append({
-                "lon": lon, "lat": lat,
-                "sensor_id": sensor_id,
-                "aqi": local_aqi,
-                "color": color,
-                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
-            })
+    # End of ThreadPoolExecutor block (variables persist)
 
     # -------------------------------------------------------------------------
     # 5. Satellite indices (synthetic)
@@ -659,6 +702,29 @@ def _asset_tooltip(name: str, prefix: str, element_id, asset_type: str, impact_h
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
         f"ID: {prefix}-{element_id}</span><br/><br/>"
         f"<b>Type:</b> {asset_type}<br/><b>Source:</b> OpenStreetMap{impact_html}"
+    )
+
+
+def _shelter_tooltip(name: str, element_id, tags: dict) -> str:
+    capacity = tags.get("capacity", "Unknown")
+    access = tags.get("access", "Public")
+    return (
+        f"<b style='font-size: 14px; color: #f59e0b;'>{name}</b>"
+        f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
+        f"ID: SHELTER-{element_id}</span><br/><br/>"
+        f"<b>Type:</b> Emergency Shelter<br/><b>Capacity:</b> {capacity}<br/><b>Access:</b> {access}"
+        f"<div style='color: #38bdf8; font-weight: bold; margin-top: 6px;'>💧 Emergency Relief Active</div>"
+    )
+
+
+def _fountain_tooltip(name: str, element_id, tags: dict) -> str:
+    operator = tags.get("operator", "Public")
+    return (
+        f"<b style='font-size: 14px; color: #38bdf8;'>{name}</b>"
+        f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
+        f"ID: FOUNTAIN-{element_id}</span><br/><br/>"
+        f"<b>Type:</b> Hydration Access<br/><b>Operator:</b> {operator}"
+        f"<div style='color: #38bdf8; font-weight: bold; margin-top: 6px;'>💧 Emergency Relief Active</div>"
     )
 
 
