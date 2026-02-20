@@ -273,3 +273,26 @@ class TestAutoAnalyzeRegion:
         agent.auto_analyze_region()
         last = _session_state["chat_history"][-1]["content"]
         assert "Mumbai" in last
+
+# ---------------------------------------------------------------------------
+# Tests: get_client
+# ---------------------------------------------------------------------------
+class TestGetClient:
+    def test_returns_none_when_no_api_key(self):
+        st_mock.secrets = {}
+        agent = AgentSimulator()
+        client = agent.get_client()
+        assert client is None
+
+    def test_returns_client_when_api_key_present(self):
+        st_mock.secrets = {"OPENAI_API_KEY": "sk-test"}
+        agent = AgentSimulator()
+        client = agent.get_client()
+        assert client is not None
+
+    def test_supports_mapbox_fallback(self):
+        # We restored support for this fallback during conflict resolution
+        st_mock.secrets = {"mapbox": {"OPENAI_API_KEY": "sk-fallback"}}
+        agent = AgentSimulator()
+        client = agent.get_client()
+        assert client is not None
