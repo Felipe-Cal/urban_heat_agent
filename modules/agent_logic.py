@@ -52,14 +52,11 @@ class AgentSimulator:
         st.session_state.chat_history.append({"role": role, "content": content})
 
     def get_client(self) -> Optional["OpenAI"]:
-        """Lazy-load the OpenAI client, checking common secret locations."""
+        """Lazy-load the OpenAI client."""
         if not OpenAI:
             return None
         if "OPENAI_API_KEY" in st.secrets:
             return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-        # Fallback: key accidentally placed under [mapbox]
-        if "mapbox" in st.secrets and "OPENAI_API_KEY" in st.secrets["mapbox"]:
-            return OpenAI(api_key=st.secrets["mapbox"]["OPENAI_API_KEY"])
         return None
 
     # ------------------------------------------------------------------
