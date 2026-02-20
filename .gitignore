@@ -39,5 +39,8 @@ venv.bak/
 *.geojson
 *.gpkg
 
+# Local SQLite DB (ephemeral on Cloud, local dev only)
+heat_sync.db
+
 # OS
 .DS_Store

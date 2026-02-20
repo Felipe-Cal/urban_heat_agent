@@ -5,6 +5,10 @@ from modules.styles import load_css
 from modules.data_generator import generate_mock_data
 from modules.map_layers import create_map
 from modules.agent_logic import AgentSimulator
+try:
+    from modules.database import init_db, load_ledger_entries, clear_ledger_entries
+except ImportError:
+    init_db = load_ledger_entries = clear_ledger_entries = None
 
 # 1. Page Config
 st.set_page_config(
@@ -68,7 +72,15 @@ if 'data' not in st.session_state or len(st.session_state.data) != 19:
     st.session_state.data = fetch_data_with_loading(city['lat'], city['lon'], st.session_state.time_of_day, st.session_state.selected_city_name, "Initializing Gaia Node")
     
 if 'green_ledger' not in st.session_state:
-    st.session_state.green_ledger = []
+    # Load persisted entries from SQLite on first run (survives page refresh)
+    if load_ledger_entries:
+        try:
+            city = st.session_state.get('selected_city_name', None)
+            st.session_state.green_ledger = load_ledger_entries(city=city)
+        except Exception:
+            st.session_state.green_ledger = []
+    else:
+        st.session_state.green_ledger = []
 
 if 'agent' not in st.session_state:
     st.session_state.agent = AgentSimulator()
@@ -178,6 +190,11 @@ with col_agent:
                 st.session_state.green_ledger = []
                 st.session_state.simulated_cooling = 0.0
                 st.session_state.sandbox_budget = 5000000.0
+                if clear_ledger_entries:
+                    try:
+                        clear_ledger_entries(city=st.session_state.get('selected_city_name'))
+                    except Exception:
+                        pass
                 st.rerun()
         else:
             if st.button(":material/nature: Launch Sandbox", use_container_width=True):
@@ -192,6 +209,11 @@ with col_agent:
                 st.session_state.green_ledger = []
                 st.session_state.simulated_cooling = 0.0
                 st.session_state.sandbox_budget = 5000000.0
+                if clear_ledger_entries:
+                    try:
+                        clear_ledger_entries(city=st.session_state.get('selected_city_name'))
+                    except Exception:
+                        pass
                 st.rerun()
             
     with st.expander("🔗 Green Ledger (Verifiable Data Provenance)", expanded=True if len(st.session_state.green_ledger) > 0 else False):

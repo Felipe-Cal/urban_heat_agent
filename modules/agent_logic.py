@@ -3,6 +3,7 @@ import time
 import random
 import re
 import os
+import hashlib
 import tempfile
 from datetime import datetime
 try:
@@ -15,6 +16,15 @@ try:
 except ImportError:
     MarkdownPdf = None
 
+try:
+    from modules.database import save_ledger_entry, init_db
+except ImportError:
+    try:
+        from database import save_ledger_entry, init_db
+    except ImportError:
+        save_ledger_entry = None
+        init_db = None
+
 class AgentSimulator:
     def __init__(self):
         if 'chat_history' not in st.session_state:
@@ -24,6 +34,12 @@ class AgentSimulator:
             ]
         if 'agent_status' not in st.session_state:
             st.session_state.agent_status = "IDLE"
+        # Ensure DB tables exist on every agent init
+        if init_db:
+            try:
+                init_db()
+            except Exception:
+                pass
 
     def get_client(self):
         """Lazy load the OpenAI client to handle hot-reloaded secrets."""
@@ -158,18 +174,38 @@ class AgentSimulator:
             'tooltip': f"<b style='font-size: 14px; color: #3b82f6;'>Simulated Intervention</b><br/><span style='color:#94a3b8; font-size:11px;'>Target: {name}</span><br/><br/><b>Installed:</b> {intervention_name}<br/><b>Cooling Effect:</b> -{cooling_offset:.1f}°C<br/><b>Health Impact:</b> {health_impact} ER visits avoided<br/><b>Cost:</b> ${cost:,.0f}"
         })
         
-        # Simulated Nature ID Hash
-        nature_id_hash = "0x" + "".join(random.choices("0123456789abcdef", k=12))
+        # --- Deterministic SHA-256 Nature ID Hash ---
+        # Tied to the actual data: same intervention on same asset always produces the same hash.
+        hash_payload = f"{name}|{intervention_name}|{lat:.4f}|{lon:.4f}|{cooling_offset:.2f}|{cost:.0f}"
+        nature_id_hash = "0x" + hashlib.sha256(hash_payload.encode()).hexdigest()[:16]
         
+        city = st.session_state.get('selected_city_name', 'Unknown')
+        
+        # Persist to SQLite (survives page refresh)
+        if save_ledger_entry:
+            try:
+                save_ledger_entry(
+                    nature_id_hash=nature_id_hash,
+                    city=city,
+                    target_asset=name,
+                    intervention=intervention_name,
+                    cooling_impact=f"-{cooling_offset:.1f}",
+                    cost=cost,
+                )
+            except Exception:
+                pass  # Non-fatal: still update session_state below
+
         if 'green_ledger' not in st.session_state:
             st.session_state.green_ledger = []
             
         st.session_state.green_ledger.append({
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "Nature ID": nature_id_hash,
+            "City": city,
             "Target Asset": name,
             "Intervention": intervention_name,
             "Cooling Impact (°C)": f"-{cooling_offset:.1f}",
+            "Cost ($)": f"${cost:,.0f}",
             "Status": "Verified ✅"
         })
         
@@ -192,8 +228,11 @@ class AgentSimulator:
         self.add_message("user", "Verify Green Bond Impact")
         st.session_state.agent_status = "VERIFYING"
         
-        rand_val = random.randint(10000000000, 100000000000)
-        hash_val = "0x" + str(rand_val) + "...31a"
+        # Deterministic hash tied to verification event data
+        city = st.session_state.get('selected_city_name', 'Unknown')
+        verify_payload = f"VERIFY|{city}|Intervention#882|2.1C|2026-baseline"
+        hash_val = "0x" + hashlib.sha256(verify_payload.encode()).hexdigest()[:20]
+        
         response = """
         <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
         **[REFLECT]** Comparing 2025 baseline vs 2026 satellite actuals.<br>
