@@ -20,7 +20,16 @@ from types import ModuleType
 # inside data_generator doesn't crash in a non-Streamlit environment.
 st_mock = MagicMock()
 st_mock.session_state = {}
-sys.modules.setdefault("streamlit", st_mock)
+
+# Make st.cache_data a pass-through decorator
+def cache_data_decorator(*args, **kwargs):
+    def wrapper(func):
+        return func
+    return wrapper
+
+st_mock.cache_data = cache_data_decorator
+
+sys.modules["streamlit"] = st_mock
 
 from modules.data_generator import generate_mock_data
 from modules.models import CityData

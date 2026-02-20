@@ -12,12 +12,14 @@ import string
 import tempfile
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any, Generator
 
 import streamlit as st
+from modules.state_manager import StateManager
 
 try:
     from openai import OpenAI
+    from openai.types.chat import ChatCompletionChunk
 except ImportError:
     OpenAI = None  # type: ignore[assignment,misc]
 
@@ -36,12 +38,8 @@ _ALL_LAYERS = [
 
 class AgentSimulator:
     def __init__(self):
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                {"role": "assistant", "content": "Initializing Gaia Node... ready for queries."}
-            ]
-        if "agent_status" not in st.session_state:
-            st.session_state.agent_status = "IDLE"
+        # Initialization handled by StateManager in app.py
+        pass
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -49,35 +47,42 @@ class AgentSimulator:
 
     def add_message(self, role: str, content: str) -> None:
         """Append a message to the persistent chat history."""
-        st.session_state.chat_history.append({"role": role, "content": content})
+        chat_history = StateManager.get("chat_history", [])
+        chat_history.append({"role": role, "content": content})
+        # StateManager.set("chat_history", chat_history) # Not needed as list is mutable and ref is same
 
     def get_client(self) -> Optional["OpenAI"]:
-        """Lazy-load the OpenAI client, checking common secret locations."""
+        """Lazy-load the OpenAI client."""
         if not OpenAI:
             return None
-        if "OPENAI_API_KEY" in st.secrets:
-            return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-        # Fallback: key accidentally placed under [mapbox]
-        if "mapbox" in st.secrets and "OPENAI_API_KEY" in st.secrets["mapbox"]:
-            return OpenAI(api_key=st.secrets["mapbox"]["OPENAI_API_KEY"])
+
+        api_key = st.secrets.get("OPENAI_API_KEY")
+        if not api_key:
+             # Check for legacy/alternative location
+             if "mapbox" in st.secrets and "OPENAI_API_KEY" in st.secrets["mapbox"]:
+                 api_key = st.secrets["mapbox"]["OPENAI_API_KEY"]
+
+        if api_key:
+            return OpenAI(api_key=api_key)
+
         return None
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_context(self) -> dict:
+    def _build_context(self) -> Dict[str, Any]:
         """
         Gather the current dashboard context into a plain dict.
 
         Returns:
             Dict with keys: city, temp, resilience, active_layers (comma-joined str).
         """
-        city = st.session_state.get("selected_city_name", "Unknown City")
-        temp: object = "Unknown"
-        resilience: object = "Unknown"
+        city = StateManager.get("selected_city_name", "Unknown City")
+        temp: Any = "Unknown"
+        resilience: Any = "Unknown"
 
-        city_data = st.session_state.get("data")
+        city_data = StateManager.get("data")
         if city_data is not None:
             try:
                 temp = city_data.current_temp
@@ -85,7 +90,7 @@ class AgentSimulator:
             except Exception:
                 pass
 
-        active = [k for k in _ALL_LAYERS if st.session_state.get(f"toggle_{k}", False)]
+        active = [k for k in _ALL_LAYERS if StateManager.get(f"toggle_{k}", False)]
         return {
             "city": city,
             "temp": temp,
@@ -93,7 +98,7 @@ class AgentSimulator:
             "active_layers": ", ".join(active) if active else "None",
         }
 
-    def _build_system_prompt(self, ctx: dict) -> dict:
+    def _build_system_prompt(self, ctx: Dict[str, Any]) -> Dict[str, str]:
         content = (
             f"You are the Gaia Heat Sync Agent, a highly advanced, bio-minimalist "
             f"Planetary Intelligence system currently focused on urban resilience for the "
@@ -120,7 +125,7 @@ class AgentSimulator:
     def simulate_deployment(self) -> None:
         """Scenario: Deploy Nervous System."""
         self.add_message("user", "Scan for Data Desserts")
-        st.session_state.agent_status = "ACTIVE"
+        StateManager.set("agent_status", "ACTIVE")
         response = (
             "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
             "**[SENSE]** Scanning for Data Deserts in Census Tract 242...<br>"
@@ -131,12 +136,12 @@ class AgentSimulator:
             "Deployment sequence initiated. Activating Sensor Grid overlay."
         )
         self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     def simulate_intervention(self) -> None:
         """Scenario: Win-Win Intervention."""
         self.add_message("user", "Detect Thermal Risk Areas")
-        st.session_state.agent_status = "REASONING"
+        StateManager.set("agent_status", "REASONING")
         response = (
             "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
             "**[SENSE]** Surface temp 49°C detected in proximity to schools.<br>"
@@ -147,13 +152,13 @@ class AgentSimulator:
             "Risk area detected. Proposing biological intervention. Activating Nature ID overlay."
         )
         self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     def auto_analyze_region(self) -> None:
         """Scenario: Auto-Analyze and suggest top interventions."""
         self.add_message("user", ":material/bolt: Auto-Analyze Region for Optimal Interventions")
-        st.session_state.agent_status = "REASONING"
-        city = st.session_state.get("selected_city_name", "This Region")
+        StateManager.set("agent_status", "REASONING")
+        city = StateManager.get("selected_city_name", "This Region")
         response = (
             f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
             f"**[SENSE]** Scanning {city} for extreme thermal anomalies and vulnerable populations.<br>"
@@ -167,7 +172,7 @@ class AgentSimulator:
             f"*Activating relevant layers for visual confirmation.*"
         )
         self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     def simulate_intervention_on_asset(self, obj: dict) -> None:
         """Sandbox Scenario: Propose a cooling intervention on a specific map asset."""
@@ -178,7 +183,7 @@ class AgentSimulator:
         lon = obj.get("lon", -118.24)
 
         self.add_message("user", f"**[SANDBOX]** Propose a cooling intervention for {name} ({asset_type}).")
-        st.session_state.agent_status = "REASONING"
+        StateManager.set("agent_status", "REASONING")
 
         # Determine intervention parameters by asset type
         if asset_type == "Concrete Mass":
@@ -195,12 +200,13 @@ class AgentSimulator:
             color = [56, 189, 248, 255]
 
         # Update simulation state
-        st.session_state.simulated_cooling += cooling_offset
-        st.session_state.sandbox_budget = st.session_state.get("sandbox_budget", 5_000_000.0) - cost
+        StateManager.set("simulated_cooling", StateManager.get("simulated_cooling", 0.0) + cooling_offset)
+        StateManager.set("sandbox_budget", StateManager.get("sandbox_budget", 5_000_000.0) - cost)
 
         nature_id_hash = "0x" + "".join(random.choices(string.hexdigits[:16], k=12))
 
-        st.session_state.simulations.append({
+        simulations = StateManager.get("simulations", [])
+        simulations.append({
             "lat": lat, "lon": lon,
             "name": intervention_name,
             "target": name,
@@ -216,10 +222,10 @@ class AgentSimulator:
                 f"<br/><b>Cost:</b> ${cost:,.0f}"
             ),
         })
+        # StateManager.set("simulations", simulations) # List is mutable
 
-        if "green_ledger" not in st.session_state:
-            st.session_state.green_ledger = []
-        st.session_state.green_ledger.append({
+        ledger = StateManager.get("green_ledger", [])
+        ledger.append({
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "Nature ID": nature_id_hash,
             "Target Asset": name,
@@ -227,6 +233,7 @@ class AgentSimulator:
             "Cooling Impact (°C)": f"-{cooling_offset:.1f}",
             "Status": "Verified ✅",
         })
+        # StateManager.set("green_ledger", ledger)
 
         response = (
             f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
@@ -240,12 +247,12 @@ class AgentSimulator:
             f"Intervention simulated and Nature ID minted. The dashboard has been updated."
         )
         self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     def simulate_verification(self) -> None:
         """Scenario: Verify Green Bond."""
         self.add_message("user", "Verify Green Bond Impact")
-        st.session_state.agent_status = "VERIFYING"
+        StateManager.set("agent_status", "VERIFYING")
         rand_val = random.randint(10_000_000_000, 100_000_000_000)
         hash_val = f"0x{rand_val}...31a"
         response = (
@@ -257,7 +264,7 @@ class AgentSimulator:
             "Verification complete. Impact cryptographically secured to the Green Ledger."
         )
         self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     # ------------------------------------------------------------------
     # LLM-powered query handling
@@ -266,13 +273,14 @@ class AgentSimulator:
     def process_custom_query(self, query: str) -> None:
         """Handle arbitrary user input, streaming from OpenAI if available."""
         self.add_message("user", query)
-        st.session_state.agent_status = "REASONING"
+        StateManager.set("agent_status", "REASONING")
 
         client = self.get_client()
         if client:
             ctx = self._build_context()
             system_prompt = self._build_system_prompt(ctx)
-            messages = [system_prompt] + list(st.session_state.chat_history)
+            chat_history = StateManager.get("chat_history", [])
+            messages = [system_prompt] + list(chat_history)
 
             try:
                 stream = client.chat.completions.create(
@@ -283,9 +291,9 @@ class AgentSimulator:
                     stream=True,
                 )
 
-                def _generate():
+                def _generate() -> Generator[str, None, None]:
                     for chunk in stream:
-                        delta = chunk.choices[0].delta.content
+                        delta = chunk.choices[0].delta.content # type: ignore[attr-defined]
                         if delta is not None:
                             yield delta
 
@@ -297,7 +305,7 @@ class AgentSimulator:
                 for action_type, layer_name in actions:
                     toggle_key = f"toggle_{layer_name.lower()}"
                     if toggle_key in st.session_state:
-                        st.session_state[toggle_key] = action_type == "ACTIVATE"
+                        StateManager.set(toggle_key, action_type == "ACTIVATE")
 
             except Exception as e:
                 st.error("*[Connection Error]* Failed to reach Gaia Central Node.")
@@ -308,7 +316,7 @@ class AgentSimulator:
             st.markdown(response)
             self.add_message("assistant", response)
 
-        st.session_state.agent_status = "IDLE"
+        StateManager.set("agent_status", "IDLE")
 
     # ------------------------------------------------------------------
     # PDF report generation
@@ -316,10 +324,10 @@ class AgentSimulator:
 
     def generate_pdf_report(self) -> Optional[bytes]:
         """Generate a markdown briefing via LLM and convert it to PDF bytes."""
-        st.session_state.agent_status = "GENERATING REPORT"
+        StateManager.set("agent_status", "GENERATING REPORT")
         client = self.get_client()
         if not client or not MarkdownPdf:
-            st.session_state.agent_status = "IDLE"
+            StateManager.set("agent_status", "IDLE")
             return None
 
         ctx = self._build_context()
@@ -365,10 +373,10 @@ class AgentSimulator:
                 pdf_bytes = f.read()
             os.remove(temp_pdf_path)
 
-            st.session_state.agent_status = "IDLE"
+            StateManager.set("agent_status", "IDLE")
             return pdf_bytes
 
         except Exception as e:
             st.error(f"Failed to generate PDF Report: {e}")
-            st.session_state.agent_status = "IDLE"
+            StateManager.set("agent_status", "IDLE")
             return None
