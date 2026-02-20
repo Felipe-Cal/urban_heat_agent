@@ -89,10 +89,10 @@ CITIES = {
 }
 
 def get_city_local_time(city_name):
-    from datetime import datetime, timedelta, time as dtime
+    from datetime import datetime, timedelta, timezone, time as dtime
     offset = CITIES[city_name].get("offset", 0)
-    # Get current UTC time
-    utc_now = datetime.utcnow()
+    # Get current UTC time (modern way to avoid deprecation)
+    utc_now = datetime.now(timezone.utc)
     # Apply offset
     city_now = utc_now + timedelta(hours=offset)
     return city_now.time().replace(second=0, microsecond=0)
@@ -505,7 +505,9 @@ with col_map:
         from datetime import datetime, time as dtime
         t_now = get_city_local_time(st.session_state.selected_city_name)
         frac_now = t_now.hour + (t_now.minute / 60.0)
-        frac_sim = st.session_state.time_of_day.hour + (st.session_state.time_of_day.minute / 60.0)
+        # Use session state time directly to avoid NameError
+        t_sim = st.session_state.time_of_day
+        frac_sim = t_sim.hour + (t_sim.minute / 60.0)
         
         # This matches the calculation in data_generator.py
         def get_var(h): return -5.0 * np.cos((h - 4) * np.pi / 11.0)
