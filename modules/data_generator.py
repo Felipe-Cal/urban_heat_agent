@@ -193,8 +193,6 @@ def generate_mock_data(
         );
         out geom;
         """
-        response = requests.get(overpass_url, params={"data": query}, timeout=25)
-
         # --- Cache: skip expensive Overpass call if we have today's data ---
         osm_cache_key = _cache_key(center_lat, center_lon)
         osm_data = _load_osm_cache(osm_cache_key)
@@ -216,168 +214,170 @@ def generate_mock_data(
                     fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {response.status_code}."
                 osm_data = {"elements": []}
 
-            def get_coords(el: dict):
-                """Extract a representative (lat, lon) from any OSM element type."""
-                if "lat" in el and "lon" in el:
-                    return el["lat"], el["lon"]
-                if el.get("type") == "way" and el.get("geometry"):
-                    mid = len(el["geometry"]) // 2
-                    return el["geometry"][mid]["lat"], el["geometry"][mid]["lon"]
-                if el.get("type") == "relation":
-                    for member in el.get("members", []):
-                        if member.get("geometry"):
-                            mid = len(member["geometry"]) // 2
-                            return member["geometry"][mid]["lat"], member["geometry"][mid]["lon"]
-                if "center" in el:
-                    return el["center"]["lat"], el["center"]["lon"]
-                return None, None
+        # --- Process elements regardless of whether data came from cache or API ---
+        def get_coords(el: dict):
+            """Extract a representative (lat, lon) from any OSM element type."""
+            if "lat" in el and "lon" in el:
+                return el["lat"], el["lon"]
+            if el.get("type") == "way" and el.get("geometry"):
+                mid = len(el["geometry"]) // 2
+                return el["geometry"][mid]["lat"], el["geometry"][mid]["lon"]
+            if el.get("type") == "relation":
+                for member in el.get("members", []):
+                    if member.get("geometry"):
+                        mid = len(member["geometry"]) // 2
+                        return member["geometry"][mid]["lat"], member["geometry"][mid]["lon"]
+            if "center" in el:
+                return el["center"]["lat"], el["center"]["lon"]
+            return None, None
 
-            _progress("Processing geospatial elements...", 50)
+        _progress("Processing geospatial elements...", 50)
 
-            elements = osm_data.get("elements", [])
-            trees = [e for e in elements if e.get("tags", {}).get("natural") == "tree"]
-            water = [e for e in elements if e.get("tags", {}).get("natural") == "water"]
-            parks = [e for e in elements if e.get("tags", {}).get("leisure") == "park"]
-            shelters = [
-                e for e in elements
-                if e.get("tags", {}).get("amenity") in ("shelter", "community_centre")
-            ]
-            fountains = [e for e in elements if e.get("tags", {}).get("amenity") == "drinking_water"]
-            green_roofs = [
-                e for e in elements
-                if e.get("tags", {}).get("green_roof") == "yes"
-                or e.get("tags", {}).get("roof:material") == "grass"
-            ]
-            gardens = [
-                e for e in elements
-                if e.get("tags", {}).get("landuse") == "allotments"
-                or e.get("tags", {}).get("leisure") == "garden"
-            ]
-            forests = [
-                e for e in elements
-                if e.get("tags", {}).get("landuse") == "forest"
-                or e.get("tags", {}).get("natural") == "wood"
-            ]
-            wetlands = [e for e in elements if e.get("tags", {}).get("natural") == "wetland"]
-            raw_buildings = [e for e in elements if "building" in e.get("tags", {})]
-            raw_traffic = [e for e in elements if "highway" in e.get("tags", {})]
+        elements = osm_data.get("elements", [])
+        trees = [e for e in elements if e.get("tags", {}).get("natural") == "tree"]
+        water = [e for e in elements if e.get("tags", {}).get("natural") == "water"]
+        parks = [e for e in elements if e.get("tags", {}).get("leisure") == "park"]
+        shelters = [
+            e for e in elements
+            if e.get("tags", {}).get("amenity") in ("shelter", "community_centre")
+        ]
+        fountains = [e for e in elements if e.get("tags", {}).get("amenity") == "drinking_water"]
+        green_roofs = [
+            e for e in elements
+            if e.get("tags", {}).get("green_roof") == "yes"
+            or e.get("tags", {}).get("roof:material") == "grass"
+        ]
+        gardens = [
+            e for e in elements
+            if e.get("tags", {}).get("landuse") == "allotments"
+            or e.get("tags", {}).get("leisure") == "garden"
+        ]
+        forests = [
+            e for e in elements
+            if e.get("tags", {}).get("landuse") == "forest"
+            or e.get("tags", {}).get("natural") == "wood"
+        ]
+        wetlands = [e for e in elements if e.get("tags", {}).get("natural") == "wetland"]
+        raw_buildings = [e for e in elements if "building" in e.get("tags", {})]
+        raw_traffic = [e for e in elements if "highway" in e.get("tags", {})]
 
-            # Buildings (PolygonLayer)
-            for b_el in raw_buildings[:500]:
-                if b_el.get("type") == "way" and b_el.get("geometry"):
-                    polygon = [[pt["lon"], pt["lat"]] for pt in b_el["geometry"]]
-                    levels = int(b_el.get("tags", {}).get("building:levels", random.randint(1, 8)))
-                    height = levels * 3.5
-                    lat, lon = get_coords(b_el)
-                    building_data.append({
-                        "polygon": polygon,
-                        "height": height,
-                        "lon": lon,
-                        "lat": lat,
-                        "asset_id": f"BLDG-{b_el['id']}",
-                        "name": b_el.get("tags", {}).get("name", "Urban Structure"),
-                        "type": "Concrete Mass",
-                        "tooltip": _building_tooltip(b_el["id"], height),
-                    })
-
-            # Traffic (PathLayer)
-            for t_el in raw_traffic[:200]:
-                if t_el.get("type") == "way" and t_el.get("geometry"):
-                    path = [[pt["lon"], pt["lat"]] for pt in t_el["geometry"]]
-                    lat, lon = get_coords(t_el)
-                    hw_type = t_el.get("tags", {}).get("highway", "road")
-                    traffic_data.append({
-                        "path": path,
-                        "lon": lon,
-                        "lat": lat,
-                        "asset_id": f"TRAFFIC-{t_el['id']}",
-                        "name": t_el.get("tags", {}).get("name", "Transit Artery"),
-                        "type": hw_type.capitalize(),
-                        "tooltip": _traffic_tooltip(t_el["id"], hw_type),
-                    })
-
-            def process_assets(elements, data_list, asset_prefix, default_name, asset_type, color, limit=500):
-                for element in elements[:limit]:
-                    lat, lon = get_coords(element)
-                    if lat is None or lon is None:
-                        continue
-                    tags = element.get("tags", {})
-                    name = tags.get("name", default_name)
-                    impact_html = _impact_html(asset_prefix)
-                    data_list.append({
-                        "lon": lon,
-                        "lat": lat,
-                        "asset_id": f"{asset_prefix}-{element['id']}",
-                        "name": name,
-                        "type": asset_type,
-                        "health": "Verified",
-                        "owner": "Public/Private",
-                        "color": color,
-                        "tooltip": _asset_tooltip(name, asset_prefix, element["id"], asset_type, impact_html),
-                    })
-
-            # Trees — special handling for species
-            for element in trees[:1000]:
-                lat, lon = get_coords(element)
-                if lat is None or lon is None:
-                    continue
-                tags = element.get("tags", {})
-                species = tags.get("species") or tags.get("genus") or "Real Tree"
-                temp_offset = round(random.uniform(0.1, 1.2), 1)
-                impact_html = f"<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>🌡️ Cooling Impact: -{temp_offset}°C</div>"
-                tree_data.append({
-                    "lon": lon, "lat": lat,
-                    "asset_id": f"TREE-{element['id']}",
-                    "name": species,
-                    "type": "Tree Canopy",
-                    "health": "Verified",
-                    "owner": "Public",
-                    "color": [5, 150, 105, 200],
-                    "tooltip": _asset_tooltip(species, "TREE", element["id"], "Tree Canopy", impact_html),
+        # Buildings (PolygonLayer)
+        for b_el in raw_buildings[:500]:
+            if b_el.get("type") == "way" and b_el.get("geometry"):
+                polygon = [[pt["lon"], pt["lat"]] for pt in b_el["geometry"]]
+                levels = int(b_el.get("tags", {}).get("building:levels", random.randint(1, 8)))
+                height = levels * 3.5
+                lat, lon = get_coords(b_el)
+                building_data.append({
+                    "polygon": polygon,
+                    "height": height,
+                    "lon": lon,
+                    "lat": lat,
+                    "asset_id": f"BLDG-{b_el['id']}",
+                    "name": b_el.get("tags", {}).get("name", "Urban Structure"),
+                    "type": "Concrete Mass",
+                    "tooltip": _building_tooltip(b_el["id"], height),
                 })
 
-            process_assets(water, water_data, "WATER", "Water Body", "Water Resource", [14, 165, 233, 200], 500)
-            process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", [132, 204, 22, 200], 500)
-            process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", [163, 230, 53, 200], 200)
-            process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", [77, 124, 15, 200], 300)
-            process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", [21, 128, 61, 200], 200)
-            process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", [12, 74, 110, 200], 100)
+        # Traffic (PathLayer)
+        for t_el in raw_traffic[:200]:
+            if t_el.get("type") == "way" and t_el.get("geometry"):
+                path = [[pt["lon"], pt["lat"]] for pt in t_el["geometry"]]
+                lat, lon = get_coords(t_el)
+                hw_type = t_el.get("tags", {}).get("highway", "road")
+                traffic_data.append({
+                    "path": path,
+                    "lon": lon,
+                    "lat": lat,
+                    "asset_id": f"TRAFFIC-{t_el['id']}",
+                    "name": t_el.get("tags", {}).get("name", "Transit Artery"),
+                    "type": hw_type.capitalize(),
+                    "tooltip": _traffic_tooltip(t_el["id"], hw_type),
+                })
 
-            # Shelters — rich tag extraction (opening hours, capacity, AC, address)
-            for element in shelters[:200]:
+        def process_assets(elements, data_list, asset_prefix, default_name, asset_type, color, limit=500):
+            for element in elements[:limit]:
                 lat, lon = get_coords(element)
                 if lat is None or lon is None:
                     continue
                 tags = element.get("tags", {})
-                name = tags.get("name", "Cooling Center")
-                shelter_data.append({
-                    "lon": lon, "lat": lat,
-                    "asset_id": f"SHELTER-{element['id']}",
+                name = tags.get("name", default_name)
+                impact_html = _impact_html(asset_prefix)
+                data_list.append({
+                    "lon": lon,
+                    "lat": lat,
+                    "asset_id": f"{asset_prefix}-{element['id']}",
                     "name": name,
-                    "type": "Emergency Shelter",
+                    "type": asset_type,
                     "health": "Verified",
-                    "owner": tags.get("operator", "Public"),
-                    "color": [245, 158, 11, 200],
-                    "tooltip": _shelter_tooltip(name, element["id"], tags),
+                    "owner": "Public/Private",
+                    "color": color,
+                    "tooltip": _asset_tooltip(name, asset_prefix, element["id"], asset_type, impact_html),
                 })
 
-            # Fountains — rich tag extraction (operator, fee, wheelchair)
-            for element in fountains[:200]:
-                lat, lon = get_coords(element)
-                if lat is None or lon is None:
-                    continue
-                tags = element.get("tags", {})
-                name = tags.get("name", "Drinking Fountain")
-                fountain_data.append({
-                    "lon": lon, "lat": lat,
-                    "asset_id": f"FOUNTAIN-{element['id']}",
-                    "name": name,
-                    "type": "Hydration Access",
-                    "health": "Verified",
-                    "owner": tags.get("operator", "Public"),
-                    "color": [56, 189, 248, 200],
-                    "tooltip": _fountain_tooltip(name, element["id"], tags),
-                })
+        # Trees — special handling for species
+        for element in trees[:1000]:
+            lat, lon = get_coords(element)
+            if lat is None or lon is None:
+                continue
+            tags = element.get("tags", {})
+            species = tags.get("species") or tags.get("genus") or "Real Tree"
+            temp_offset = round(random.uniform(0.1, 1.2), 1)
+            impact_html = f"<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>\U0001f321\ufe0f Cooling Impact: -{temp_offset}\u00b0C</div>"
+            tree_data.append({
+                "lon": lon, "lat": lat,
+                "asset_id": f"TREE-{element['id']}",
+                "name": species,
+                "type": "Tree Canopy",
+                "health": "Verified",
+                "owner": "Public",
+                "color": [5, 150, 105, 200],
+                "tooltip": _asset_tooltip(species, "TREE", element["id"], "Tree Canopy", impact_html),
+            })
+
+        process_assets(water, water_data, "WATER", "Water Body", "Water Resource", [14, 165, 233, 200], 500)
+        process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", [132, 204, 22, 200], 500)
+        process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", [163, 230, 53, 200], 200)
+        process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", [77, 124, 15, 200], 300)
+        process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", [21, 128, 61, 200], 200)
+        process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", [12, 74, 110, 200], 100)
+
+        # Shelters — rich tag extraction (opening hours, capacity, AC, address)
+        for element in shelters[:200]:
+            lat, lon = get_coords(element)
+            if lat is None or lon is None:
+                continue
+            tags = element.get("tags", {})
+            name = tags.get("name", "Cooling Center")
+            shelter_data.append({
+                "lon": lon, "lat": lat,
+                "asset_id": f"SHELTER-{element['id']}",
+                "name": name,
+                "type": "Emergency Shelter",
+                "health": "Verified",
+                "owner": tags.get("operator", "Public"),
+                "color": [245, 158, 11, 200],
+                "tooltip": _shelter_tooltip(name, element["id"], tags),
+            })
+
+        # Fountains — rich tag extraction (operator, fee, wheelchair)
+        for element in fountains[:200]:
+            lat, lon = get_coords(element)
+            if lat is None or lon is None:
+                continue
+            tags = element.get("tags", {})
+            name = tags.get("name", "Drinking Fountain")
+            fountain_data.append({
+                "lon": lon, "lat": lat,
+                "asset_id": f"FOUNTAIN-{element['id']}",
+                "name": name,
+                "type": "Hydration Access",
+                "health": "Verified",
+                "owner": tags.get("operator", "Public"),
+                "color": [56, 189, 248, 200],
+                "tooltip": _fountain_tooltip(name, element["id"], tags),
+            })
+
 
     except requests.exceptions.Timeout:
         print("Error: Overpass API request timed out after 25 seconds.")
