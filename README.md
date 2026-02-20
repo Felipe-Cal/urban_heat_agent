@@ -44,6 +44,7 @@ access_token = "pk...."
 
 - **OpenAI key** is required for the Gaia Agent and PDF report generation. Without it, the agent falls back to a simulated response.
 - **Mapbox token** is required for the satellite/street base map. Without it, the app falls back to a free CartoDB base map.
+- **OPENAQ_API_KEY** (optional): when set, Air Quality nodes show real per-sensor AQI from OpenAQ latest measurements instead of city-level value.
 
 ## Project Structure
 

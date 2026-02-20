@@ -202,7 +202,11 @@ def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc) -> Ci
     def update_progress(msg, pct):
         progress_bar.progress(pct, text=f"{action_desc} ({city_name}) - {msg}")
 
-    data = generate_mock_data(lat, lon, time_of_day, progress_callback=update_progress)
+    data = generate_mock_data(
+        lat, lon, time_of_day,
+        progress_callback=update_progress,
+        openaq_api_key=st.secrets.get("OPENAQ_API_KEY"),
+    )
     progress_bar.empty()
     return data
 
@@ -480,31 +484,40 @@ with col_map:
     # Map Visualization Placeholder
     map_placeholder = st.container()
 
-    # Layer Toggles
+    d = city_data
+    def _layer_toggle(label: str, key: str, has_data: bool) -> None:
+        if not has_data:
+            st.session_state[key] = False
+        st.toggle(
+            label + (" (no data)" if not has_data else ""),
+            key=key,
+            disabled=not has_data,
+        )
+
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>MAP LAYERS</p>", unsafe_allow_html=True)
     r1, r2, r3 = st.columns(3)
     with r1:
-        st.toggle("Thermal", key="toggle_thermal")
+        _layer_toggle("Thermal", "toggle_thermal", not d.df_thermal.empty)
     with r2:
-        st.toggle("Air Quality", key="toggle_sensors")
+        _layer_toggle("Air Quality", "toggle_sensors", not d.df_sensors.empty)
     with r3:
-        st.toggle("Buildings", key="toggle_buildings")
-        st.toggle("Traffic", key="toggle_traffic")
+        _layer_toggle("Buildings", "toggle_buildings", not d.df_buildings.empty)
+        _layer_toggle("Traffic", "toggle_traffic", not d.df_traffic.empty)
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE & ASSETS</p>", unsafe_allow_html=True)
     n1, n2, n3 = st.columns(3)
     with n1:
-        st.toggle("Tree Canopy",       key="toggle_trees")
-        st.toggle("Urban Forests",     key="toggle_forests")
-        st.toggle("Community Gardens", key="toggle_gardens")
+        _layer_toggle("Tree Canopy",       "toggle_trees",      not d.df_trees.empty)
+        _layer_toggle("Urban Forests",     "toggle_forests",    not d.df_forests.empty)
+        _layer_toggle("Community Gardens", "toggle_gardens",    not d.df_gardens.empty)
     with n2:
-        st.toggle("Water Sources",     key="toggle_water")
-        st.toggle("Wetlands",          key="toggle_wetlands")
-        st.toggle("Drinking Fountains",key="toggle_fountains")
+        _layer_toggle("Water Sources",     "toggle_water",      not d.df_water.empty)
+        _layer_toggle("Wetlands",          "toggle_wetlands",   not d.df_wetlands.empty)
+        _layer_toggle("Drinking Fountains","toggle_fountains",  not d.df_fountains.empty)
     with n3:
-        st.toggle("Public Parks",      key="toggle_parks")
-        st.toggle("Green Roofs",       key="toggle_green_roofs")
-        st.toggle("Cooling Centers",   key="toggle_shelters")
+        _layer_toggle("Public Parks",      "toggle_parks",      not d.df_parks.empty)
+        _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
+        _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
 
     with map_placeholder:
         map_config = MapConfig(

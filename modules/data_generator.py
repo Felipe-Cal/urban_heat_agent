@@ -54,11 +54,21 @@ def _save_osm_cache(key: str, data: dict) -> None:
 
 
 
+def _pm25_to_aqi(pm25: float) -> int:
+    breakpoints = [(0, 0, 12, 50), (12.1, 51, 35.4, 100), (35.5, 101, 55.4, 150),
+                   (55.5, 151, 150.4, 200), (150.5, 201, 250.4, 300), (250.5, 301, 500.4, 500)]
+    for bp_lo, i_lo, bp_hi, i_hi in breakpoints:
+        if bp_lo <= pm25 <= bp_hi:
+            return int(round((i_hi - i_lo) / (bp_hi - bp_lo) * (pm25 - bp_lo) + i_lo))
+    return min(500, max(0, int(round(pm25))))
+
+
 def generate_mock_data(
     center_lat: float = 34.0522,
     center_lon: float = -118.2437,
     time_of_day: str = "14:00",
     progress_callback: Optional[Callable[[str, int], None]] = None,
+    openaq_api_key: Optional[str] = None,
 ) -> CityData:
     """
     Generate all map/dashboard data for a city snapshot.
@@ -334,7 +344,7 @@ def generate_mock_data(
         for b_el in raw_buildings[:500]:
             if b_el.get("type") == "way" and b_el.get("geometry"):
                 polygon = [[pt["lon"], pt["lat"]] for pt in b_el["geometry"]]
-                levels = int(b_el.get("tags", {}).get("building:levels", random.randint(1, 8)))
+                levels = max(1, int(b_el.get("tags", {}).get("building:levels", 1)))
                 height = levels * 3.5
                 lat, lon = get_coords(b_el)
                 building_data.append({
@@ -391,8 +401,7 @@ def generate_mock_data(
                 continue
             tags = element.get("tags", {})
             species = tags.get("species") or tags.get("genus") or "Real Tree"
-            temp_offset = round(random.uniform(0.1, 1.2), 1)
-            impact_html = f"<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>\U0001f321\ufe0f Cooling Impact: -{temp_offset}\u00b0C</div>"
+            impact_html = "<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>Cooling asset</div>"
             tree_data.append({
                 "lon": lon, "lat": lat,
                 "asset_id": f"TREE-{element['id']}",
@@ -459,27 +468,7 @@ def generate_mock_data(
     # 4. Air quality sensor nodes  (real locations from OpenAQ v3)
     # -------------------------------------------------------------------------
     _progress("Connecting to OpenAQ sensor network...", 75)
-    sensor_data = _fetch_openaq_sensors(center_lat, center_lon, current_aqi)
-    if not sensor_data:
-        # Fallback: synthetic locations when OpenAQ is unavailable
-        for _ in range(25):
-            lat = center_lat + np.random.normal(0, 0.03)
-            lon = center_lon + np.random.normal(0, 0.03)
-            sensor_id = _make_sensor_id()
-            local_aqi = max(0, current_aqi)
-            if local_aqi < 50:
-                color = [16, 185, 129, 200]   # Emerald
-            elif local_aqi < 100:
-                color = [245, 158, 11, 200]   # Amber
-            else:
-                color = [239, 68, 68, 200]    # Red
-            sensor_data.append({
-                "lon": lon, "lat": lat,
-                "sensor_id": sensor_id,
-                "aqi": local_aqi,
-                "color": color,
-                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
-            })
+    sensor_data = _fetch_openaq_sensors(center_lat, center_lon, current_aqi, openaq_api_key=openaq_api_key)
 
     _progress("Generating bio-regional data structures...", 90)
 
@@ -500,9 +489,6 @@ def generate_mock_data(
         + score_wetlands + score_gardens + score_green_roofs
         + score_shelters + score_fountains
     )
-    if resilience_score == 0:
-        resilience_score = random.randint(45, 65)
-
     _progress("Complete.", 100)
 
     return CityData(
@@ -537,15 +523,12 @@ def _fetch_openaq_sensors(
     base_aqi: int,
     radius_m: int = 25_000,
     limit: int = 25,
+    openaq_api_key: Optional[str] = None,
 ) -> list:
-    """
-    Fetch real AQ monitoring station locations from OpenAQ v3.
-
-    Sensor coordinates are real; the AQI value is the live Open-Meteo figure
-    perturbed per sensor (same approach as before, but anchored to a real location).
-    Returns [] on any error so the caller falls back to the synthetic version.
-    """
     try:
+        headers = {"accept": "application/json"}
+        if openaq_api_key:
+            headers["X-API-Key"] = openaq_api_key
         resp = requests.get(
             "https://api.openaq.org/v3/locations",
             params={
@@ -553,7 +536,7 @@ def _fetch_openaq_sensors(
                 "radius": radius_m,
                 "limit": limit,
             },
-            headers={"accept": "application/json"},
+            headers=headers,
             timeout=8,
         )
         if resp.status_code != 200:
@@ -566,8 +549,26 @@ def _fetch_openaq_sensors(
             lon = coords.get("longitude")
             if lat is None or lon is None:
                 continue
-            sensor_id = f"OAQ-{loc.get('id', _make_sensor_id())}"
+            loc_id = loc.get("id")
+            sensor_id = f"OAQ-{loc_id}" if loc_id is not None else f"OAQ-{_make_sensor_id()}"
             local_aqi = max(0, base_aqi)
+            if openaq_api_key and loc_id is not None:
+                try:
+                    latest_resp = requests.get(
+                        f"https://api.openaq.org/v3/locations/{loc_id}/latest",
+                        params={"limit": 10},
+                        headers=headers,
+                        timeout=5,
+                    )
+                    if latest_resp.status_code == 200:
+                        results = latest_resp.json().get("results", [])
+                        for r in results:
+                            v = r.get("value")
+                            if v is not None and 0 <= v <= 1000:
+                                local_aqi = _pm25_to_aqi(float(v))
+                                break
+                except Exception:
+                    pass
             if local_aqi < 50:
                 color = [16, 185, 129, 200]
             elif local_aqi < 100:
@@ -596,8 +597,7 @@ def _make_sensor_id() -> str:
 
 def _impact_html(asset_prefix: str) -> str:
     if asset_prefix in ("TREE", "PARK", "WATER", "FOREST", "ROOF", "GARDEN", "WETLAND"):
-        temp_offset = round(random.uniform(0.5, 2.5), 1)
-        return f"<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>🌡️ Cooling Impact: -{temp_offset}°C</div>"
+        return "<div style='color: #10b981; font-weight: bold; margin-top: 6px;'>Cooling asset</div>"
     if asset_prefix in ("SHELTER", "FOUNTAIN"):
         return "<div style='color: #38bdf8; font-weight: bold; margin-top: 6px;'>💧 Emergency Relief Active</div>"
     return ""
@@ -628,6 +628,64 @@ def _traffic_tooltip(element_id, hw_type: str) -> str:
         f"ID: TRAFFIC-{element_id}</span><br/><br/>"
         f"<b>Type:</b> {hw_type.capitalize()}<br/><b>Emissions:</b> Active"
     )
+
+
+def _opening_hours_status(oh: str) -> str:
+    if not oh:
+        return "Check Hours"
+    oh_lower = oh.lower().replace(" ", "")
+    if "24/7" in oh_lower or "24:00" in oh_lower or "00:00-24:00" in oh_lower:
+        return "Open Now"
+    return "Check Hours"
+
+
+def _shelter_tooltip(name: str, element_id, tags: dict) -> str:
+    oh = tags.get("opening_hours", "")
+    status = _opening_hours_status(oh)
+    status_color = "#10b981" if status == "Open Now" else "#94a3b8"
+    parts = [
+        f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
+        f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: SHELTER-{element_id}</span>",
+        f"<br/><br/><b>Type:</b> Emergency Shelter",
+        f"<br/><span style='color:{status_color}; font-weight:600;'>{'🟢' if status == 'Open Now' else '🔴'} {status}</span>",
+    ]
+    if oh and status == "Check Hours":
+        parts.append(f"<br/><b>Hours:</b> {oh}")
+    addr = tags.get("addr:street", "")
+    if tags.get("addr:housenumber"):
+        addr = f"{tags.get('addr:housenumber')} {addr}".strip()
+    if addr:
+        parts.append(f"<br/><b>Address:</b> {addr}")
+    if tags.get("operator"):
+        parts.append(f"<br/><b>Operator:</b> {tags.get('operator')}")
+    if tags.get("capacity"):
+        parts.append(f"<br/><b>Capacity:</b> {tags.get('capacity')}")
+    if tags.get("air_conditioning"):
+        parts.append(f"<br/><b>Air conditioning:</b> {tags.get('air_conditioning')}")
+    if tags.get("wheelchair"):
+        parts.append(f"<br/><b>Wheelchair:</b> {tags.get('wheelchair')}")
+    if tags.get("phone") or tags.get("contact:phone"):
+        parts.append(f"<br/><b>Phone:</b> {tags.get('phone') or tags.get('contact:phone')}")
+    parts.append("<br/><b>Source:</b> OpenStreetMap")
+    return "".join(parts)
+
+
+def _fountain_tooltip(name: str, element_id, tags: dict) -> str:
+    parts = [
+        f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
+        f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: FOUNTAIN-{element_id}</span>",
+        f"<br/><br/><b>Type:</b> Hydration Access",
+    ]
+    if tags.get("operator"):
+        parts.append(f"<br/><b>Operator:</b> {tags.get('operator')}")
+    fee = tags.get("fee", "no")
+    parts.append(f"<br/><b>Free access:</b> {'Yes' if fee in ('no', 'false', '0') else fee}")
+    if tags.get("wheelchair"):
+        parts.append(f"<br/><b>Wheelchair:</b> {tags.get('wheelchair')}")
+    if tags.get("seasonal") or tags.get("seasonal:yes"):
+        parts.append(f"<br/><b>Seasonal:</b> {tags.get('seasonal', 'yes')}")
+    parts.append("<br/><b>Source:</b> OpenStreetMap")
+    return "".join(parts)
 
 
 def _sensor_tooltip(sensor_id: str, aqi: int, lat: float, lon: float) -> str:
