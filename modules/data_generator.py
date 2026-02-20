@@ -109,19 +109,16 @@ def generate_mock_data(
     except Exception as e:
         print(f"Error fetching Open-Meteo APIs: {e}")
 
-    # Diurnal temperature variation (min at ~4am, max at ~3pm; ~10°C swing)
+    # Calculate Diurnal temporal shift based on the UI slider
     try:
         hour = int(time_of_day.split(":")[0])
     except (ValueError, IndexError):
         hour = 14
 
     temp_variation = -5.0 * np.cos((hour - 4) * np.pi / 11.0)
-    current_temp += temp_variation
-
-    if hour in [7, 8, 9, 16, 17, 18]:
-        current_aqi += random.randint(10, 20)
-    elif hour < 6 or hour > 20:
-        current_aqi = max(0, current_aqi - random.randint(5, 15))
+    
+    # We will compute the final `current_temp` directly from the thermal grid 
+    # if it loads successfully, ensuring the UI perfectly matches the true Local Surface Temp.
 
     # -------------------------------------------------------------------------
     # 2. Real thermal surface temperature (Open-Meteo LST grid)
@@ -212,11 +209,13 @@ def generate_mock_data(
             max_t = min_t + 1.0
             
         for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
+            t += temp_variation
             # map to [0.05, 0.5] range so overlapping points sum to ~1.0 instead of 10+
             norm_t = 0.05 + 0.45 * (t - min_t) / (max_t - min_t)
             thermal_data.append([r_lon, r_lat, norm_t])
             
         for lon, lat, t in zip(lons, lats, raw_temps):
+            t += temp_variation
             thermal_points_data.append({
                 "lon": lon, "lat": lat, "temp": t,
                 "tooltip": _thermal_point_tooltip(lat, lon, t)
@@ -242,6 +241,10 @@ def generate_mock_data(
 
     df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
     df_thermal_points = pd.DataFrame(thermal_points_data)
+    
+    # Overwrite the base metric with the actual surface temperature average 
+    if not df_thermal_points.empty and "temp" in df_thermal_points.columns:
+        current_temp = float(df_thermal_points["temp"].mean())
 
     # -------------------------------------------------------------------------
     # 2b. Synthetic population density
