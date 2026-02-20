@@ -275,3 +275,30 @@ class TestAutoAnalyzeRegion:
         agent.auto_analyze_region()
         last = _session_state["chat_history"][-1]["content"]
         assert "Mumbai" in last
+
+# ---------------------------------------------------------------------------
+# Tests: get_client
+# ---------------------------------------------------------------------------
+
+class TestGetClient:
+    def test_returns_none_when_no_api_key(self):
+        st_mock.secrets = {}
+        agent = AgentSimulator()
+        client = agent.get_client()
+        assert client is None
+
+    def test_returns_client_when_api_key_present(self):
+        st_mock.secrets = {"OPENAI_API_KEY": "sk-test"}
+        # Patch the OpenAI class used in agent_logic
+        with patch("modules.agent_logic.OpenAI") as mock_openai:
+            agent = AgentSimulator()
+            client = agent.get_client()
+            mock_openai.assert_called_with(api_key="sk-test")
+            assert client == mock_openai.return_value
+
+    def test_ignores_mapbox_fallback(self):
+        # This confirms we successfully removed the fallback
+        st_mock.secrets = {"mapbox": {"OPENAI_API_KEY": "sk-bad"}}
+        agent = AgentSimulator()
+        client = agent.get_client()
+        assert client is None
