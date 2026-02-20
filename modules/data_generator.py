@@ -101,13 +101,17 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
     building_data = []
     traffic_data = []
     
+    # Initialize raw element lists to prevent UnboundLocalError
+    trees, water, parks, shelters, fountains = [], [], [], [], []
+    green_roofs, gardens, forests, wetlands = [], [], [], []
+    
     if progress_callback: progress_callback("Fetching OpenStreetMap infrastructure...", 30)
     try:
-        # Query OSM for multiple nature elements within 8km of the city center
-        radius_meters = 8000
+        # Query OSM for multiple nature elements within a performant radius
+        radius_meters = 1500 # Reduced further from 2500m to prevent 15s Gateway Timeout on free tier
         overpass_url = "http://overpass-api.de/api/interpreter"
         query = f"""
-        [out:json];
+        [out:json][timeout:25];
         (
           node["natural"="tree"](around:{radius_meters},{CENTER_LAT},{CENTER_LON});
           nwr["natural"="water"](around:{radius_meters},{CENTER_LAT},{CENTER_LON});
@@ -123,12 +127,13 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
           nwr["natural"="wetland"](around:{radius_meters},{CENTER_LAT},{CENTER_LON});
           
           // New Drivers
-          nwr["building"](around:{radius_meters / 2},{CENTER_LAT},{CENTER_LON}); // Smaller radius for buildings to prevent massive payloads
+          way["building"](around:{radius_meters / 2},{CENTER_LAT},{CENTER_LON}); // Smaller radius for buildings to prevent massive payloads
           way["highway"~"motorway|trunk|primary"](around:{radius_meters},{CENTER_LAT},{CENTER_LON});
         );
         out geom; // Note: Changed to out geom to get coordinates for polygons and ways
         """
-        response = requests.get(overpass_url, params={'data': query})
+        # Set a strict timeout so the app doesn't hang forever
+        response = requests.get(overpass_url, params={'data': query}, timeout=25)
         
         if response.status_code == 200:
             osm_data = response.json()
@@ -254,12 +259,25 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
             process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", [77, 124, 15, 200], 300) # Lime-700
             process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", [21, 128, 61, 200], 200) # Green-700
             process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", [12, 74, 110, 200], 100) # Sky-900
+            
+        else:
+            print(f"Warning: Overpass API returned status {response.status_code}")
+            import streamlit as st
+            if response.status_code == 504:
+                st.session_state.map_error_toast = "⏳ OpenStreetMap Gateway Timeout (504). The query was too large for the region."
+            elif response.status_code == 429:
+                st.session_state.map_error_toast = "⚠️ OpenStreetMap API is rate-limited (429). Map loaded without Nature ID assets."
+            else:
+                st.session_state.map_error_toast = f"⚠️ OpenStreetMap Error {response.status_code}. Map loaded without real-world assets."
                 
+    except requests.exceptions.Timeout:
+        print("Error: Overpass API request timed out after 25 seconds.")
+        import streamlit as st
+        st.session_state.map_error_toast = "⏳ OpenStreetMap API response timed out. Map rendered using fallback data."
     except Exception as e:
         print(f"Error fetching OSM data: {e}")
-        # Default initialization if API fails
-        trees, water, parks, shelters, fountains, green_roofs, gardens, forests, wetlands, building_data, traffic_data = [],[],[],[],[],[],[],[],[],[],[]
-        pass
+        import streamlit as st
+        st.session_state.map_error_toast = "🛑 Network Error fetching OpenStreetMap data. Check your connection."
         
     df_trees = pd.DataFrame(tree_data)
     df_water = pd.DataFrame(water_data)

@@ -12,6 +12,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_thermal:
         thermal_layer = pdk.Layer(
             "HeatmapLayer",
+            id="Thermal",
             data=df_thermal,
             opacity=0.8,
             get_position=['lon', 'lat'],
@@ -33,6 +34,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_ndvi and not df_ndvi.empty:
         ndvi_layer = pdk.Layer(
             "HeatmapLayer",
+            id="NDVI",
             data=df_ndvi,
             opacity=0.7,
             get_position=['lon', 'lat'],
@@ -55,6 +57,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_albedo and not df_albedo.empty:
         albedo_layer = pdk.Layer(
             "HeatmapLayer",
+            id="Albedo",
             data=df_albedo,
             opacity=0.7,
             get_position=['lon', 'lat'],
@@ -77,6 +80,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_population and not df_population.empty:
         population_layer = pdk.Layer(
             "HeatmapLayer",
+            id="Population",
             data=df_population,
             opacity=0.7,
             get_position=['lon', 'lat'],
@@ -99,6 +103,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_buildings and not df_buildings.empty:
         buildings_layer = pdk.Layer(
             "PolygonLayer",
+            id="Buildings",
             data=df_buildings,
             opacity=0.8,
             stroked=False,
@@ -118,6 +123,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if show_traffic and not df_traffic.empty:
         traffic_layer = pdk.Layer(
             "PathLayer",
+            id="Traffic",
             data=df_traffic,
             width_scale=5,
             width_min_pixels=2,
@@ -294,6 +300,7 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
     if simulations:
         sim_layer = pdk.Layer(
             "ScatterplotLayer",
+            id="Simulations",
             data=simulations,
             get_position='[lon, lat]',
             get_fill_color='color',

@@ -49,12 +49,12 @@ class AgentSimulator:
         self.add_message("user", "Scan for Data Desserts")
         st.session_state.agent_status = "ACTIVE"
         
-        response = """
+        response = f"""
         <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
-        <span style='color: #00e5ff;'>[SENSE]</span> Scanning for Data Deserts in Census Tract 242...<br>
-        <span style='color: #00e5ff;'>[PLAN]</span> Identified 8 optimal locations for Solar-IoT nodes.<br>
-        <span style='color: #00e5ff;'>[ACT]</span> Generating procurement request for open-standard sensors.<br>
-        <span style='color: #00e5ff;'>[ACT]</span> Protocol: VDP-Signed (Verified Data Provenance).
+        **[SENSE]** Scanning for Data Deserts in Census Tract 242...<br>
+        **[PLAN]** Identified 8 optimal locations for Solar-IoT nodes.<br>
+        **[ACT]** Generating procurement request for open-standard sensors.<br>
+        **[ACT]** Protocol: VDP-Signed (Verified Data Provenance).
         </div>
         Deployment sequence initiated. Activating Sensor Grid overlay.
         """
@@ -66,14 +66,37 @@ class AgentSimulator:
         self.add_message("user", "Detect Thermal Risk Areas")
         st.session_state.agent_status = "REASONING"
         
-        response = """
+        response = f"""
         <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
-        <span style='color: #f59e0b;'>[SENSE]</span> Surface temp 49°C detected in proximity to schools.<br>
-        <span style='color: #f59e0b;'>[REASON]</span> High cardiovascular risk correlated with heat index.<br>
-        <span style='color: #00e5ff;'>[PLAN]</span> Strategy: 40 Coast Live Oaks + Reflective Albedo Coating.<br>
-        <span style='color: #00e5ff;'>[ROI]</span> Est. -3.2°C cooling | $1.2k annual energy savings.
+        **[SENSE]** Surface temp 49°C detected in proximity to schools.<br>
+        **[REASON]** High cardiovascular risk correlated with heat index.<br>
+        **[PLAN]** Strategy: 40 Coast Live Oaks + Reflective Albedo Coating.<br>
+        **[ROI]** Est. -3.2°C cooling | $1.2k annual energy savings.
         </div>
         Risk area detected. Proposing biological intervention. Activating Nature ID overlay.
+        """
+        self.add_message("assistant", response)
+        st.session_state.agent_status = "IDLE"
+
+    def auto_analyze_region(self):
+        """Scenario: Auto-Analyze and suggest top interventions."""
+        self.add_message("user", ":material/bolt: Auto-Analyze Region for Optimal Interventions")
+        st.session_state.agent_status = "REASONING"
+        
+        city = st.session_state.get('selected_city_name', 'This Region')
+        
+        response = f"""
+        <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
+        **[SENSE]** Scanning {city} for extreme thermal anomalies and vulnerable populations.<br>
+        **[REASON]** Correlating heat islands with lacking tree canopy and high density.<br>
+        **[PLAN]** Generated 3 optimal interventions localized for maximum impact.
+        </div>
+        **Top Suggested Interventions:**
+        1. **Urban Forest Injection (Zone A):** +500 Trees near Highway Corridor. Est Cooling: -1.2°C.
+        2. **Albedo Modification (Zone B):** 20,000 sq ft of white roofs in dense commercial center. Est Cooling: -0.8°C.
+        3. **Emergency Cooling Center (Zone C):** Deploy active hydration/shelter node in highest risk tract.
+        
+        *Activating relevant layers for visual confirmation.*
         """
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
@@ -92,6 +115,8 @@ class AgentSimulator:
         # Calculate impact based on type
         cooling_offset = 0.0
         energy_savings = 0
+        health_impact = 0
+        cost = 0
         intervention_name = ""
         color = [0, 255, 128, 200]
         
@@ -99,20 +124,29 @@ class AgentSimulator:
             intervention_name = "500m² Intensive Green Roof"
             cooling_offset = 0.4
             energy_savings = 12500
+            health_impact = 1
+            cost = 150000
             color = [163, 230, 53, 255] # Lime green
         elif asset_type in ["Motorway", "Trunk", "Primary", "Road"] or "Transit" in name:
             intervention_name = "Bioswale & Canopy Corridor"
             cooling_offset = 0.7
             energy_savings = 8400
+            health_impact = 3
+            cost = 300000
             color = [21, 128, 61, 255] # Forest green
         else:
             intervention_name = "Standard Albedo Enhancement"
             cooling_offset = 0.2
             energy_savings = 5000
+            health_impact = 0
+            cost = 50000
             color = [56, 189, 248, 255] # Sky blue
             
         # Add to state
         st.session_state.simulated_cooling += cooling_offset
+        if 'sandbox_budget' in st.session_state:
+            st.session_state.sandbox_budget -= cost
+            
         st.session_state.simulations.append({
             'lat': lat,
             'lon': lon,
@@ -121,17 +155,34 @@ class AgentSimulator:
             'cooling': cooling_offset,
             'color': color,
             'radius': 250,
-            'tooltip': f"<b style='font-size: 14px; color: #10b981;'>Simulated Intervention</b><br/><span style='color:#94a3b8; font-size:11px;'>Target: {name}</span><br/><br/><b>Installed:</b> {intervention_name}<br/><b>Cooling Effect:</b> -{cooling_offset:.1f}°C"
+            'tooltip': f"<b style='font-size: 14px; color: #3b82f6;'>Simulated Intervention</b><br/><span style='color:#94a3b8; font-size:11px;'>Target: {name}</span><br/><br/><b>Installed:</b> {intervention_name}<br/><b>Cooling Effect:</b> -{cooling_offset:.1f}°C<br/><b>Health Impact:</b> {health_impact} ER visits avoided<br/><b>Cost:</b> ${cost:,.0f}"
+        })
+        
+        # Simulated Nature ID Hash
+        nature_id_hash = "0x" + "".join(random.choices("0123456789abcdef", k=12))
+        
+        if 'green_ledger' not in st.session_state:
+            st.session_state.green_ledger = []
+            
+        st.session_state.green_ledger.append({
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Nature ID": nature_id_hash,
+            "Target Asset": name,
+            "Intervention": intervention_name,
+            "Cooling Impact (°C)": f"-{cooling_offset:.1f}",
+            "Status": "Verified ✅"
         })
         
         response = f"""
         <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
-        <span style='color: #00e5ff;'>[ANALYZE]</span> Target: {name} (Surface type: {asset_type}) at {lat:.4f}, {lon:.4f}<br>
-        <span style='color: #00e5ff;'>[PROPOSE]</span> Intervention: {intervention_name}<br>
-        <span style='color: #10b981;'>[ROI MATH]</span> Est. Local Cooling: -{cooling_offset:.1f}°C<br>
-        <span style='color: #10b981;'>[ROI MATH]</span> Est. Annual Savings: ${energy_savings:,}
+        **[ANALYZE]** Target: {name} (Surface type: {asset_type}) at {lat:.4f}, {lon:.4f}<br>
+        **[PROPOSE]** Intervention: {intervention_name} | Cost: ${cost:,.0f}<br>
+        **[ROI: GRID]** Est. Annual Savings: ${energy_savings:,}<br>
+        **[ROI: HEALTH]** Est. ER Visits Prevented: {health_impact}<br>
+        **[ROI: CLIMATE]** Est. Local Cooling: -{cooling_offset:.1f}°C<br>
+        **[MINT]** Nature ID Generated: `{nature_id_hash}` (Submitting to Green Ledger)
         </div>
-        Intervention simulated. The dashboard metrics and map have been updated to reflect the new state.
+        Intervention simulated and Nature ID minted. The dashboard has been updated to reflect the new state.
         """
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
@@ -145,9 +196,9 @@ class AgentSimulator:
         hash_val = "0x" + str(rand_val) + "...31a"
         response = """
         <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
-        <span style='color: #00e5ff;'>[REFLECT]</span> Comparing 2025 baseline vs 2026 satellite actuals.<br>
-        <span style='color: #10b981;'>[VERIFY]</span> Intervention #882 reduced peak temp by 2.1°C.<br>
-        <span style='color: #10b981;'>[BLOCKCHAIN]</span> Impact Sealed. Hash: HASH_VALUE_PLACEHOLDER
+        **[REFLECT]** Comparing 2025 baseline vs 2026 satellite actuals.<br>
+        **[VERIFY]** Intervention #882 reduced peak temp by 2.1°C.<br>
+        **[BLOCKCHAIN]** Impact Sealed. Hash: HASH_VALUE_PLACEHOLDER
         </div>
         Verification complete. Impact cryptographically secured to the Green Ledger.
         """.replace("HASH_VALUE_PLACEHOLDER", hash_val)
@@ -167,15 +218,17 @@ class AgentSimulator:
             resilience = "Unknown"
             if "data" in st.session_state:
                 try:
-                    temp = st.session_state.data[-1]
-                    resilience = st.session_state.data[-2]
+                    # In data_generator: return df_thermal, ..., resilience_score, current_temp, current_aqi
+                    temp = st.session_state.data[-2]
+                    resilience = st.session_state.data[-3]
                 except Exception:
                     pass
                     
-            active_layers = [k for k, v in st.session_state.get("layer_toggles", {}).items() if v]
+            all_layers = ["thermal", "trees", "water", "parks", "shelters", "fountains", "green_roofs", "gardens", "forests", "wetlands", "sensors", "ndvi", "albedo", "buildings", "traffic", "population"]
+            active_layers = [k for k in all_layers if st.session_state.get(f"toggle_{k}", False)]
             layers_str = ", ".join(active_layers) if active_layers else "None"
             
-            system_prompt_text = "You are the Gaia Heat Sync Agent, a highly advanced, bio-minimalist Planetary Intelligence system currently focused on urban resilience for the CITY_PLACEHOLDER Bio-Region Node. Your tone is technical, institutional, but 'living'—think high-trust Digital Public Infrastructure. Focus on urban heat, tree canopy, water resources, public parks, and sensor data. Keep responses concise and structured. Use formatting like <span style='color: #00e5ff;'>[SENSE]</span> when describing reasoning steps if relevant, but otherwise respond naturally as an AI. CURRENT SYSTEM CONTEXT - Avg Surface Temp: TEMP_PLACE°C | Resilience Score: RESILIENCE_PLACE/100 | Active Map Layers: LAYERS_PLACE. IMPORTANT: If the user asks to see or activate a layer, include the exact tag [ACTION: ACTIVATE_{LAYER_NAME}] in your response. Available layers are: THERMAL, TREES, WATER, PARKS, SHELTERS, FOUNTAINS, GREEN_ROOFS, GARDENS, FORESTS, WETLANDS, SENSORS. To deactivate, use [ACTION: DEACTIVATE_{LAYER_NAME}]."
+            system_prompt_text = "You are the Gaia Heat Sync Agent, a highly advanced, bio-minimalist Planetary Intelligence system currently focused on urban resilience for the CITY_PLACEHOLDER Bio-Region Node. Your tone is technical, institutional, but 'living'—think high-trust Digital Public Infrastructure. Focus on urban heat, tree canopy, water resources, public parks, and sensor data. Keep responses concise and structured. Use formatting like <span style='color: #3b82f6; font-weight: 500;'>[SENSE]</span> when describing reasoning steps if relevant, but otherwise respond naturally as an AI. CURRENT SYSTEM CONTEXT - Avg Surface Temp: TEMP_PLACE°C | Resilience Score: RESILIENCE_PLACE/100 | Active Map Layers: LAYERS_PLACE. IMPORTANT: If the user asks to see or activate a layer, include the exact tag [ACTION: ACTIVATE_{LAYER_NAME}] in your response. Available layers are: THERMAL, TREES, WATER, PARKS, SHELTERS, FOUNTAINS, GREEN_ROOFS, GARDENS, FORESTS, WETLANDS, SENSORS. To deactivate, use [ACTION: DEACTIVATE_{LAYER_NAME}]."
             system_prompt = {
                 "role": "system",
                 "content": system_prompt_text.replace("CITY_PLACEHOLDER", city).replace("TEMP_PLACE", str(temp)).replace("RESILIENCE_PLACE", str(resilience)).replace("LAYERS_PLACE", layers_str)
@@ -207,11 +260,12 @@ class AgentSimulator:
                 actions = re.findall(r'\[ACTION:\s*(ACTIVATE|DEACTIVATE)_([A-Z_]+)\]', assistant_response)
                 for action_type, layer_name in actions:
                     layer_key = layer_name.lower()
-                    if layer_key in st.session_state.get("layer_toggles", {}):
-                        st.session_state.layer_toggles[layer_key] = (action_type == "ACTIVATE")
+                    expected_key = f"toggle_{layer_key}"
+                    if expected_key in st.session_state:
+                        st.session_state[expected_key] = (action_type == "ACTIVATE")
             except Exception as e:
                 st.error(f"*[Connection Error]* Failed to reach Gaia Central Node.")
-                self.add_message("assistant", f"*[Connection Error]* Failed to reach Gaia Central Node: {str(e)}")
+                self.add_message("assistant", f"**:material/error: [Connection Error]** Failed to reach Gaia Central Node: {str(e)}")
         else:
             time.sleep(1) # Fake processing time
             response = f"Simulated response to: '{query}'. (OpenAI API key not configured in secrets.toml)."
@@ -239,7 +293,8 @@ class AgentSimulator:
             except Exception:
                 pass
                 
-        active_layers = [k for k, v in st.session_state.get("layer_toggles", {}).items() if v]
+        all_layers = ["thermal", "trees", "water", "parks", "shelters", "fountains", "green_roofs", "gardens", "forests", "wetlands", "sensors", "ndvi", "albedo", "buildings", "traffic", "population"]
+        active_layers = [k for k in all_layers if st.session_state.get(f"toggle_{k}", False)]
         layers_str = ", ".join(active_layers) if active_layers else "None"
         
         system_prompt_text = "You are the Gaia Heat Sync Agent. CURRENT SYSTEM CONTEXT - Avg Surface Temp: TEMP_PLACE°C | Resilience Score: RESILIENCE_PLACE/100 | Active Map Layers: LAYERS_PLACE."
