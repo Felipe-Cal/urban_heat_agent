@@ -97,6 +97,8 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
     garden_data = []
     forest_data = []
     wetland_data = []
+    building_data = []
+    traffic_data = []
     
     try:
         # Query OSM for multiple nature elements within 8km of the city center
@@ -161,7 +163,6 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
             raw_traffic = [e for e in osm_data.get('elements', []) if 'highway' in e.get('tags', {})]
             
             # Process Geometry for Buildings (PolygonLayer)
-            building_data = []
             for b_el in raw_buildings[:500]: # Limit to prevent lag
                 if b_el.get('type') == 'way' and 'geometry' in b_el:
                     polygon = [[pt['lon'], pt['lat']] for pt in b_el['geometry']]
@@ -180,7 +181,6 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
                     })
                     
             # Process Geometry for Traffic (PathLayer)
-            traffic_data = []
             for t_el in raw_traffic[:200]:
                 if t_el.get('type') == 'way' and 'geometry' in t_el:
                     path = [[pt['lon'], pt['lat']] for pt in t_el['geometry']]

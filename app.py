@@ -47,17 +47,16 @@ if 'last_clicked_asset' not in st.session_state:
 def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc):
     with st.status(f"{action_desc} ({city_name})", expanded=True) as status:
         st.write("🛰️ Synchronizing orbital thermal imaging...")
-        time.sleep(0.3)
+        time.sleep(1.0)
         st.write("🌍 Compiling OpenStreetMap infrastructure layers...")
-        time.sleep(0.4)
+        time.sleep(3.0)
         st.write("📡 Accessing Open-Meteo physical sensors...")
-        time.sleep(0.2)
+        time.sleep(4.0)
         st.write("🧬 Generating bio-regional data structures...")
         
         data = generate_mock_data(lat, lon, time_of_day)
         
-        status.update(label="Biosphere Data Synchronized!", state="complete", expanded=False)
-        time.sleep(0.4)
+        status.update(state="complete", expanded=False)
         return data
 
 if 'data' not in st.session_state or len(st.session_state.data) != 19:
