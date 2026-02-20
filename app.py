@@ -241,7 +241,7 @@ with col_map:
         center_lon=CITIES[st.session_state.selected_city_name]['lon']
     )
 
-    selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object")
+    selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object", key="main_map")
     
     if selection and selection.get("selection") and selection["selection"].get("objects"):
         obj = selection["selection"]["objects"][0]
@@ -291,15 +291,4 @@ with col_map:
         st.session_state.layer_toggles["green_roofs"] = st.toggle("Green Roofs", value=st.session_state.layer_toggles["green_roofs"])
         st.session_state.layer_toggles["shelters"] = st.toggle("Cooling Centers", value=st.session_state.layer_toggles["shelters"])
 
-    selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object")
-    
-    if selection and selection.get("selection") and selection["selection"].get("objects"):
-        obj = selection["selection"]["objects"][0]
-        asset_id = obj.get('asset_id') or obj.get('sensor_id')
-        name = obj.get('name') or "Sensor Node"
-        asset_type = obj.get('type') or "System Telemetry"
-        
-        if asset_id and st.session_state.last_clicked_asset != asset_id:
-            st.session_state.last_clicked_asset = asset_id
-            st.session_state.pending_map_click = f"**[MAP EVENT]** I just clicked on: **{name}** (ID: `{asset_id}`, Type: `{asset_type}`). Analyze it for me."
-            st.rerun()
+

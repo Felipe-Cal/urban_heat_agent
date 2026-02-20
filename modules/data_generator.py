@@ -342,4 +342,4 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
         
     df_albedo = pd.DataFrame(albedo_data, columns=['lon', 'lat', 'weight'])
     
-    return df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountains, df_green_roofs, df_gardens, df_forests, df_wetlands, df_sensors, df_ndvi, df_albedo, resilience_score, current_temp, current_aqi
+    return df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountains, df_green_roofs, df_gardens, df_forests, df_wetlands, df_sensors, df_ndvi, df_albedo, df_buildings, df_traffic, df_population, resilience_score, current_temp, current_aqi
