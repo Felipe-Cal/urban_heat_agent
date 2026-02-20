@@ -44,10 +44,25 @@ if 'pending_map_click' not in st.session_state:
 if 'last_clicked_asset' not in st.session_state:
     st.session_state.last_clicked_asset = None
 
+def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc):
+    with st.status(f"{action_desc} ({city_name})", expanded=True) as status:
+        st.write("🛰️ Synchronizing orbital thermal imaging...")
+        time.sleep(0.3)
+        st.write("🌍 Compiling OpenStreetMap infrastructure layers...")
+        time.sleep(0.4)
+        st.write("📡 Accessing Open-Meteo physical sensors...")
+        time.sleep(0.2)
+        st.write("🧬 Generating bio-regional data structures...")
+        
+        data = generate_mock_data(lat, lon, time_of_day)
+        
+        status.update(label="Biosphere Data Synchronized!", state="complete", expanded=False)
+        time.sleep(0.4)
+        return data
+
 if 'data' not in st.session_state or len(st.session_state.data) != 19:
     city = CITIES[st.session_state.selected_city_name]
-    with st.spinner("Initializing Gaia Node & Fetching Biosphere Data..."):
-        st.session_state.data = generate_mock_data(city['lat'], city['lon'], st.session_state.time_of_day)
+    st.session_state.data = fetch_data_with_loading(city['lat'], city['lon'], st.session_state.time_of_day, st.session_state.selected_city_name, "Initializing Gaia Node")
     
 if 'agent' not in st.session_state:
     st.session_state.agent = AgentSimulator()
@@ -182,8 +197,7 @@ with col_map:
         if selected_city != st.session_state.selected_city_name:
             st.session_state.selected_city_name = selected_city
             coords = CITIES[selected_city]
-            with st.spinner(f"Establishing connection to {selected_city}..."):
-                st.session_state.data = generate_mock_data(coords['lat'], coords['lon'], st.session_state.time_of_day)
+            st.session_state.data = fetch_data_with_loading(coords['lat'], coords['lon'], st.session_state.time_of_day, selected_city, "Establishing connection to")
             st.rerun()
             
     with ctrl2:
@@ -199,8 +213,7 @@ with col_map:
     if time_val != current_hour:
         st.session_state.time_of_day = f"{time_val:02d}:00"
         coords = CITIES[st.session_state.selected_city_name]
-        with st.spinner(f"Simulating bio-region for {time_val:02d}:00..."):
-            st.session_state.data = generate_mock_data(coords['lat'], coords['lon'], st.session_state.time_of_day)
+        st.session_state.data = fetch_data_with_loading(coords['lat'], coords['lon'], st.session_state.time_of_day, st.session_state.selected_city_name, f"Simulating regional shift to {time_val:02d}:00 for")
         st.rerun()
 
     # Map Visualization
