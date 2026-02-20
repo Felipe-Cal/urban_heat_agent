@@ -53,4 +53,36 @@ All locations come from **OpenStreetMap**, a continuously updated open geodataba
 
 ---
 
+## UC-02 · Real Thermal Surface Temperature Heatmap
+
+**Status:** ✅ Live (as of 2026-02-20)
+
+### What it does
+A city stakeholder explores the temperature distribution across a neighbourhood to identify Urban Heat Islands (UHIs) and correlate them with the lack of green infrastructure or presence of heavy built environment. The thermal layer displays an interpolated heatmap of real surface temperatures.
+
+### What makes it real
+| Data field | Source | Real? |
+|---|---|---|
+| Land Surface Temperature (LST) | Open-Meteo `soil_temperature_0cm` API | ✅ Real |
+| Spatial Sampling | ~3 km grid around city centre | ✅ Real |
+
+*Note: The platform previously used synthetic Gaussian blobs centred on the city, but now fetches real model-derived skin/surface temperature data matching remote sensing paradigms like MODIS L1B/L2.*
+
+### Limitations
+- The Open-Meteo spatial resolution is typically between 1 km and 11 km depending on the underlying weather model (e.g., HRRR, ICON D2), meaning micro-urban variations (e.g., one street vs the next) might be smoothed out compared to direct satellite imagery.
+- During high API load or network timeouts, the layer falls back to a sparse synthetic grid to ensure continuous visual presence.
+
+### How to test
+
+1. Open the app at the Streamlit Cloud URL (or `localhost:8501`)
+2. Select an urban focus area (like **Los Angeles, CA** or **Singapore**)
+3. In the **SATELLITE INDICES** section (left panel), activate:
+   - `🌡️ Thermal Heatmap`
+4. Verify the heatmap is displayed. It should follow an irregular, natural spatial pattern (hot spots and cool spots corresponding to local weather models), not a perfectly symmetric circle.
+5. In your browser's Developer Tools (Network tab), filter requests by `open-meteo.com` and reload the page. Verify a batch request containing `current=soil_temperature_0cm` and a long string of comma-separated latitudes/longitudes is made.
+
+**Expected result:** The map displays a realistic thermal overlay sourced via a batch API call, rather than a uniformly decaying synthetic circle.
+
+---
+
 *Add new use cases below as they are validated.*

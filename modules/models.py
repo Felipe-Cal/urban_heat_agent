@@ -16,6 +16,7 @@ class CityData:
     """All data produced by generate_mock_data for a single city/time snapshot."""
 
     df_thermal: pd.DataFrame
+    df_thermal_points: pd.DataFrame
     df_trees: pd.DataFrame
     df_water: pd.DataFrame
     df_parks: pd.DataFrame

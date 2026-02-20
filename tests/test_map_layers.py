@@ -29,6 +29,7 @@ def _empty_city_data() -> CityData:
     empty = pd.DataFrame()
     return CityData(
         df_thermal=pd.DataFrame(columns=["lon", "lat", "weight"]),
+        df_thermal_points=pd.DataFrame(columns=["lon", "lat", "temp", "tooltip"]),
         df_trees=empty,
         df_water=empty,
         df_parks=empty,

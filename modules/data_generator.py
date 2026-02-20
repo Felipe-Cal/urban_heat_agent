@@ -128,6 +128,7 @@ def generate_mock_data(
     # -------------------------------------------------------------------------
     _progress("Acquiring Land Surface Temperature (LST) data...", 20)
     thermal_data = []
+    thermal_points_data = []
     
     # 10x10 grid (~3km radius total)
     steps = 10
@@ -188,15 +189,14 @@ def generate_mock_data(
         grid_pts = np.column_stack((lats, lons))
         temps_arr = np.array(raw_temps)
         
-        num_interp_points = 1500
-        min_lat, max_lat = min(lats), max(lats)
-        min_lon, max_lon = min(lons), max(lons)
+        num_interp_points = 2000
         
-        rand_lats = np.random.uniform(min_lat, max_lat, num_interp_points)
-        rand_lons = np.random.uniform(min_lon, max_lon, num_interp_points)
+        # Gaussian distribution creates a natural fade at the edges instead of a hard square
+        rand_lats = np.random.normal(center_lat, 0.03, num_interp_points)
+        rand_lons = np.random.normal(center_lon, 0.03, num_interp_points)
         rand_pts = np.column_stack((rand_lats, rand_lons))
         
-        # Broadcasting to find distances (1500 x 100)
+        # Broadcasting to find distances (2000 x 100)
         rand_pts_exp = rand_pts[:, np.newaxis, :]
         grid_pts_exp = grid_pts[np.newaxis, :, :]
         
@@ -206,11 +206,21 @@ def generate_mock_data(
         
         interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
         
+        # Normalize the temperatures to maximize visual contrast of microclimates
+        min_t, max_t = np.min(interp_temps), np.max(interp_temps)
+        if max_t - min_t < 0.1:
+            max_t = min_t + 1.0
+            
         for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
-            # Add micro-variation to break contour banding
-            t += random.uniform(-0.3, 0.3)
-            weight = max(0.1, t / max_theoretical_temp)
-            thermal_data.append([r_lon, r_lat, weight])
+            # map to [0.05, 0.5] range so overlapping points sum to ~1.0 instead of 10+
+            norm_t = 0.05 + 0.45 * (t - min_t) / (max_t - min_t)
+            thermal_data.append([r_lon, r_lat, norm_t])
+            
+        for lon, lat, t in zip(lons, lats, raw_temps):
+            thermal_points_data.append({
+                "lon": lon, "lat": lat, "temp": t,
+                "tooltip": _thermal_point_tooltip(lat, lon, t)
+            })
     else:
         # Fallback to sparse synthetic grid
         for _ in range(300):
@@ -221,8 +231,17 @@ def generate_mock_data(
                 temp = current_temp + random.uniform(0, uhi_effect)
                 weight = max(0.1, temp / max_theoretical_temp)
                 thermal_data.append([lon, lat, weight])
+                
+        # Fallback points
+        for lon, lat in zip(lons, lats):
+            temp = current_temp + random.uniform(0, 8)
+            thermal_points_data.append({
+                "lon": lon, "lat": lat, "temp": temp,
+                "tooltip": _thermal_point_tooltip(lat, lon, temp)
+            })
 
     df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
+    df_thermal_points = pd.DataFrame(thermal_points_data)
 
     # -------------------------------------------------------------------------
     # 2b. Synthetic population density
@@ -555,6 +574,7 @@ def generate_mock_data(
 
     return CityData(
         df_thermal=pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"]),
+        df_thermal_points=pd.DataFrame(thermal_points_data),
         df_trees=pd.DataFrame(tree_data),
         df_water=pd.DataFrame(water_data),
         df_parks=pd.DataFrame(park_data),
@@ -686,5 +706,14 @@ def _sensor_tooltip(sensor_id: str, aqi: int, lat: float, lon: float) -> str:
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
         f"ID: {sensor_id}</span><br/><br/>"
         f"<b>US AQI:</b> <span style='font-size: 14px; font-weight:bold;'>{aqi}</span>"
+        f"<br/><span style='color:#94a3b8; font-size:11px;'>Lat: {lat:.4f} | Lon: {lon:.4f}</span>"
+    )
+
+def _thermal_point_tooltip(lat: float, lon: float, temp: float) -> str:
+    return (
+        f"<b style='font-size: 14px; color: #ff5555;'>LST Sensor Data</b>"
+        f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>"
+        f"Source: Open-Meteo</b></span><br/><br/>"
+        f"<b>Surface Temp:</b> <span style='font-size: 14px; font-weight:bold;'>{temp:.1f}°C</span>"
         f"<br/><span style='color:#94a3b8; font-size:11px;'>Lat: {lat:.4f} | Lon: {lon:.4f}</span>"
     )

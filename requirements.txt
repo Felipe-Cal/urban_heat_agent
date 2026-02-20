@@ -5,3 +5,4 @@ numpy==1.26.4
 requests==2.32.5
 openai==2.21.0
 markdown-pdf==1.13.1
+supabase==2.3.4

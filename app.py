@@ -2,6 +2,8 @@ import random
 import streamlit as st
 import pandas as pd
 import time
+import os
+from supabase import create_client, Client
 from modules.styles import load_css
 from modules.data_generator import generate_mock_data
 from modules.map_layers import create_map
@@ -16,7 +18,20 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Load Styles
+# 2. Supabase Auth Connection
+@st.cache_resource
+def init_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error(f"Failed to initialize Supabase. Please ensure SUPABASE_URL and SUPABASE_KEY are in .streamlit/secrets.toml. Error: {e}")
+    st.stop()
+
+# 3. Load Styles
 load_css()
 
 # City Data (Bio-Regions)
@@ -33,8 +48,10 @@ CITIES = {
     "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093},
 }
 
-# 3. Initialize Session State
+# 4. Initialize Session State
 _state_defaults = {
+    "user_session":       None,
+
     "selected_city_name": "Los Angeles, USA",
     "time_of_day":        "14:00",
     "pending_map_click":  None,
@@ -50,6 +67,120 @@ _state_defaults = {
 for key, default in _state_defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
+
+# 5. Authentication UI Handlers
+def handle_login(email, password):
+    try:
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        if response.user:
+            st.session_state["user_session"] = response.user
+            st.success("Login successful!")
+            st.rerun()
+    except Exception as e:
+        st.error(f"Login failed: {e}")
+
+def handle_signup(email, password):
+    try:
+        response = supabase.auth.sign_up({"email": email, "password": password})
+        if response.user:
+            # Try to auto-login immediately (works if email confirmation is disabled)
+            try:
+                login_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                if login_response.session:
+                    st.session_state["user_session"] = login_response.user
+                    st.success("Account created successfully! Logging you in...")
+                    time.sleep(1)
+                    st.rerun()
+                    return
+            except Exception:
+                pass
+            
+            st.success("Sign up successful! Please switch to the Login tab or check your email.")
+        else:
+            st.warning("Check your email for a confirmation link.")
+    except Exception as e:
+        st.error(f"Sign up failed: {e}")
+
+def handle_logout():
+    try:
+        supabase.auth.sign_out()
+    except Exception as e:
+        pass # Ignore remote signout failures
+    st.session_state.clear()
+    st.rerun()
+
+def handle_google_login():
+    try:
+        response = supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": "http://localhost:8501"
+            }
+        })
+        if response.url:
+            st.session_state["waiting_for_oauth"] = True
+            st.markdown(f'<meta http-equiv="refresh" content="0;url={response.url}">', unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"Google login failed: {e}")
+
+# We depend entirely on st.session_state["user_session"] which is unique per browser session.
+
+# 6. Main App Check: Show Login Page if not authenticated
+if not st.session_state.get("user_session"):
+    st.markdown("<h1 style='text-align: center;'>🌍 Gaia Heat Sync</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>Planetary Intelligence Platform</h3>", unsafe_allow_html=True)
+    st.write("---")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        tab1, tab2 = st.tabs(["Login", "Sign Up"])
+        
+        with tab1:
+            st.subheader("Login to your account")
+            with st.form("login_form"):
+                log_email = st.text_input("Email", key="log_email")
+                log_password = st.text_input("Password", type="password", key="log_password")
+                submit_login = st.form_submit_button("Login", type="primary", use_container_width=True)
+                
+                if submit_login:
+                    if log_email and log_password:
+                        handle_login(log_email, log_password)
+                    else:
+                        st.warning("Please provide both email and password.")
+            
+            st.markdown("---")
+            if st.button("Continue with Google 🚀", use_container_width=True):
+                handle_google_login()
+                        
+        with tab2:
+            st.subheader("Create a new account")
+            with st.form("signup_form"):
+                sign_email = st.text_input("Email", key="sign_email")
+                sign_password = st.text_input("Password", type="password", key="sign_password")
+                sign_password_confirm = st.text_input("Confirm Password", type="password", key="sign_password_confirm")
+                submit_signup = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
+                
+                if submit_signup:
+                    if sign_email and sign_password:
+                        if sign_password == sign_password_confirm:
+                            if len(sign_password) >= 6:
+                                handle_signup(sign_email, sign_password)
+                            else:
+                                st.warning("Password must be at least 6 characters long.")
+                        else:
+                            st.warning("Passwords do not match.")
+                    else:
+                        st.warning("Please provide both email and password.")
+
+    st.stop() # Stops execution here so the main app doesn't render
+
+# 7. Authenticated App Flow below this line
+with st.sidebar:
+    st.markdown("### Profile")
+    st.write(f"Logged in as: `{st.session_state['user_session'].email}`")
+    if st.button("Log Out"):
+        handle_logout()
+
 
 # Layer toggles — all off by default
 _ALL_LAYERS = [

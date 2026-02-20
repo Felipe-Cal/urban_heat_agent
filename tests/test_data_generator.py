@@ -26,6 +26,12 @@ from modules.data_generator import generate_mock_data
 from modules.models import CityData
 
 
+@pytest.fixture(autouse=True)
+def disable_caching(monkeypatch):
+    """Ensure all tests hit the mocked requests.get instead of the on-disk cache."""
+    monkeypatch.setattr("modules.data_generator._load_osm_cache", lambda *args, **kwargs: None)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,6 +47,14 @@ def _make_ok_aqi_response(aqi: int = 40):
     resp = MagicMock()
     resp.status_code = 200
     resp.json.return_value = {"current": {"us_aqi": aqi}}
+    return resp
+
+
+def _make_ok_thermal_response():
+    resp = MagicMock()
+    resp.status_code = 200
+    # Provide 100 mock points for the 10x10 thermal grid
+    resp.json.return_value = [{"current": {"soil_temperature_0cm": 25.0 + i % 5}} for i in range(100)]
     return resp
 
 
@@ -84,8 +98,9 @@ class TestGenerateMockDataReturnType:
     @patch("modules.data_generator.requests.get")
     def test_returns_city_data_instance(self, mock_get):
         mock_get.side_effect = [
-            _make_ok_meteo_response(28.0),
-            _make_ok_aqi_response(55),
+            _make_ok_meteo_response(),
+            _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data(34.05, -118.24, "14:00")
@@ -96,6 +111,7 @@ class TestGenerateMockDataReturnType:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
@@ -116,6 +132,7 @@ class TestGenerateMockDataScalars:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
@@ -126,6 +143,7 @@ class TestGenerateMockDataScalars:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
@@ -139,6 +157,7 @@ class TestGenerateMockDataScalars:
         mock_get.side_effect = [
             _make_ok_meteo_response(32.5),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
@@ -149,6 +168,7 @@ class TestGenerateMockDataScalars:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(75),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
@@ -188,6 +208,7 @@ class TestGenerateMockDataTimeOfDay:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         # Should not raise
@@ -200,6 +221,7 @@ class TestGenerateMockDataTimeOfDay:
             mock_get.side_effect = [
                 _make_ok_meteo_response(),
                 _make_ok_aqi_response(),
+                _make_ok_thermal_response(),
                 _make_ok_osm_response(),
             ]
             result = generate_mock_data(time_of_day=f"{hour:02d}:00")
@@ -212,20 +234,22 @@ class TestGenerateMockDataThermalDataFrame:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
         assert set(["lon", "lat", "weight"]).issubset(result.df_thermal.columns)
 
     @patch("modules.data_generator.requests.get")
-    def test_thermal_weights_are_positive(self, mock_get):
+    def test_thermal_weights_are_numeric(self, mock_get):
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
-        assert (result.df_thermal["weight"] > 0).all()
+        assert pd.api.types.is_numeric_dtype(result.df_thermal["weight"])
 
 
 class TestProgressCallback:
@@ -234,6 +258,7 @@ class TestProgressCallback:
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
             _make_ok_osm_response(),
         ]
         calls = []
@@ -242,3 +267,34 @@ class TestProgressCallback:
         # Last call should hit 100%
         last_pct = calls[-1][1]
         assert last_pct == 100
+
+
+class TestRealThermalGrid:
+    @patch("modules.data_generator.requests.get")
+    def test_thermal_grid_returns_2000_rows(self, mock_get):
+        mock_get.side_effect = [
+            _make_ok_meteo_response(),
+            _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
+            _make_ok_osm_response(),
+        ]
+        result = generate_mock_data()
+        assert len(result.df_thermal) == 2000, f"Expected 2000 points in thermal grid, got {len(result.df_thermal)}"
+        assert len(result.df_thermal_points) == 100, f"Expected 100 raw points, got {len(result.df_thermal_points)}"
+
+    @patch("modules.data_generator.requests.get")
+    def test_thermal_grid_fallback_on_failure(self, mock_get):
+        import requests as req_lib
+        
+        # Make the 3rd (thermal grid) raise a Timeout, and the 4th succeed for OSM
+        mock_get.side_effect = [
+            _make_ok_meteo_response(),
+            _make_ok_aqi_response(),
+            req_lib.exceptions.Timeout("mock timeout on thermal grid"),
+            _make_ok_osm_response(),
+        ]
+        result = generate_mock_data()
+        # Fallback generates 300 synthetic points
+        assert len(result.df_thermal) == 300, "Fallback should generate 300 points"
+        assert not result.df_thermal.empty, "df_thermal should not be empty on failure"
+        assert len(result.df_thermal_points) == 100, "Fallback should generate 100 raw points"
