@@ -379,15 +379,6 @@ def generate_mock_data(
                     "tooltip": _fountain_tooltip(name, element["id"], tags),
                 })
 
-        else:
-            print(f"Warning: Overpass API returned status {response.status_code}")
-            if response.status_code == 504:
-                fetch_error = "⏳ OpenStreetMap Gateway Timeout (504). The query was too large for the region."
-            elif response.status_code == 429:
-                fetch_error = "⚠️ OpenStreetMap API is rate-limited (429). Map loaded without Nature ID assets."
-            else:
-                fetch_error = f"⚠️ OpenStreetMap Error {response.status_code}. Map loaded without real-world assets."
-
     except requests.exceptions.Timeout:
         print("Error: Overpass API request timed out after 25 seconds.")
         fetch_error = "⏳ OpenStreetMap API response timed out. Map rendered using fallback data."
