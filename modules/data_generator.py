@@ -124,18 +124,103 @@ def generate_mock_data(
         current_aqi = max(0, current_aqi - random.randint(5, 15))
 
     # -------------------------------------------------------------------------
-    # 2. Synthetic thermal heatmap
+    # 2. Real thermal surface temperature (Open-Meteo LST grid)
     # -------------------------------------------------------------------------
-    max_theoretical_temp = 50.0
+    _progress("Acquiring Land Surface Temperature (LST) data...", 20)
     thermal_data = []
-    for _ in range(500):
-        lat = center_lat + np.random.normal(0, 0.02)
-        lon = center_lon + np.random.normal(0, 0.02)
-        distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-        uhi_effect = max(0.0, 8 - distance * 200)
-        temp = current_temp + random.uniform(0, uhi_effect)
-        weight = max(0.1, temp / max_theoretical_temp)
-        thermal_data.append([lon, lat, weight])
+    
+    # 10x10 grid (~3km radius total)
+    steps = 10
+    lat_step = 0.006  # ~670m
+    lon_step = 0.006
+    
+    start_lat = center_lat - (lat_step * steps / 2)
+    start_lon = center_lon - (lon_step * steps / 2)
+    
+    lats = []
+    lons = []
+    for i in range(steps):
+        for j in range(steps):
+            lats.append(round(start_lat + i * lat_step, 6))
+            lons.append(round(start_lon + j * lon_step, 6))
+            
+    # Open-Meteo multi-point format: latitude=a,b,c&longitude=x,y,z
+    lats_str = ",".join(map(str, lats))
+    lons_str = ",".join(map(str, lons))
+    
+    thermal_cache_key = f"thermal_{_cache_key(center_lat, center_lon)}"
+    cached_thermal = _load_osm_cache(thermal_cache_key)
+    
+    max_theoretical_temp = 50.0
+
+    if cached_thermal and len(cached_thermal) == len(lats):
+        _progress("Loaded thermal grid from cache...", 25)
+        raw_temps = [pt["temp"] for pt in cached_thermal]
+    else:
+        try:
+            thermal_url = (
+                f"https://api.open-meteo.com/v1/forecast"
+                f"?latitude={lats_str}&longitude={lons_str}"
+                f"&current=soil_temperature_0cm&temperature_unit=celsius"
+            )
+            thermal_resp = requests.get(thermal_url, timeout=10)
+            if thermal_resp.status_code == 200:
+                results = thermal_resp.json()
+                cache_payload = []
+                raw_temps = []
+                for i, res in enumerate(results):
+                    t = res.get("current", {}).get("soil_temperature_0cm") 
+                    if t is None:
+                        t = current_temp
+                    cache_payload.append({"temp": t})
+                    raw_temps.append(t)
+                _save_osm_cache(thermal_cache_key, cache_payload)
+            else:
+                raise Exception(f"Thermal API returned {thermal_resp.status_code}")
+                
+        except Exception as e:
+            print(f"Error fetching real thermal grid: {e}. Falling back to synthetic.")
+            raw_temps = None
+
+    if raw_temps:
+        # Interpolate the rigid 10x10 grid onto a 1500-point random scatter 
+        # using Inverse Distance Weighting (IDW) to create a smooth, organic heatmap
+        grid_pts = np.column_stack((lats, lons))
+        temps_arr = np.array(raw_temps)
+        
+        num_interp_points = 1500
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+        
+        rand_lats = np.random.uniform(min_lat, max_lat, num_interp_points)
+        rand_lons = np.random.uniform(min_lon, max_lon, num_interp_points)
+        rand_pts = np.column_stack((rand_lats, rand_lons))
+        
+        # Broadcasting to find distances (1500 x 100)
+        rand_pts_exp = rand_pts[:, np.newaxis, :]
+        grid_pts_exp = grid_pts[np.newaxis, :, :]
+        
+        dist_sq = np.sum((rand_pts_exp - grid_pts_exp) ** 2, axis=2)
+        dist_sq[dist_sq == 0] = 1e-10  # prevent div by zero
+        weights = 1.0 / dist_sq
+        
+        interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
+        
+        for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
+            # Add micro-variation to break contour banding
+            t += random.uniform(-0.3, 0.3)
+            weight = max(0.1, t / max_theoretical_temp)
+            thermal_data.append([r_lon, r_lat, weight])
+    else:
+        # Fallback to sparse synthetic grid
+        for _ in range(300):
+                lat = center_lat + np.random.normal(0, 0.02)
+                lon = center_lon + np.random.normal(0, 0.02)
+                distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
+                uhi_effect = max(0.0, 8 - distance * 200)
+                temp = current_temp + random.uniform(0, uhi_effect)
+                weight = max(0.1, temp / max_theoretical_temp)
+                thermal_data.append([lon, lat, weight])
 
     df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
 
@@ -197,9 +282,7 @@ def generate_mock_data(
         osm_cache_key = _cache_key(center_lat, center_lon)
         osm_data = _load_osm_cache(osm_cache_key)
 
-        if osm_data is not None:
-            _progress("Loaded from local cache...", 50)
-        else:
+        if osm_data is None:
             response = requests.get(overpass_url, params={"data": query}, timeout=25)
             if response.status_code == 200:
                 osm_data = response.json()
@@ -213,6 +296,8 @@ def generate_mock_data(
                 else:
                     fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {response.status_code}."
                 osm_data = {"elements": []}
+        else:
+            _progress("Loaded from local cache...", 50)
 
         # --- Process elements regardless of whether data came from cache or API ---
         def get_coords(el: dict):
@@ -278,6 +363,19 @@ def generate_mock_data(
                     "type": "Concrete Mass",
                     "tooltip": _building_tooltip(b_el["id"], height),
                 })
+
+        # Population density: replace synthetic Gaussian with real OSM building centroids.
+        # More floors -> more occupants -> higher density weight.
+        if building_data:
+            population_data = [
+                {
+                    "lat": b["lat"],
+                    "lon": b["lon"],
+                    "weight": max(10, b.get("height", 7.0) / 3.5 * 15),
+                }
+                for b in building_data
+                if b.get("lat") and b.get("lon")
+            ]
 
         # Traffic (PathLayer)
         for t_el in raw_traffic[:200]:
@@ -387,28 +485,30 @@ def generate_mock_data(
         fetch_error = "🛑 Network Error fetching OpenStreetMap data. Check your connection."
 
     # -------------------------------------------------------------------------
-    # 4. Air quality sensor nodes
+    # 4. Air quality sensor nodes  (real locations from OpenAQ v3)
     # -------------------------------------------------------------------------
-    _progress("Accessing Open-Meteo physical sensors...", 75)
-    sensor_data = []
-    for _ in range(25):
-        lat = center_lat + np.random.normal(0, 0.03)
-        lon = center_lon + np.random.normal(0, 0.03)
-        sensor_id = _make_sensor_id()
-        local_aqi = max(0, current_aqi + random.randint(-15, 25))
-        if local_aqi < 50:
-            color = [16, 185, 129, 200]   # Emerald
-        elif local_aqi < 100:
-            color = [245, 158, 11, 200]   # Amber
-        else:
-            color = [239, 68, 68, 200]    # Red
-        sensor_data.append({
-            "lon": lon, "lat": lat,
-            "sensor_id": sensor_id,
-            "aqi": local_aqi,
-            "color": color,
-            "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
-        })
+    _progress("Connecting to OpenAQ sensor network...", 75)
+    sensor_data = _fetch_openaq_sensors(center_lat, center_lon, current_aqi)
+    if not sensor_data:
+        # Fallback: synthetic locations when OpenAQ is unavailable
+        for _ in range(25):
+            lat = center_lat + np.random.normal(0, 0.03)
+            lon = center_lon + np.random.normal(0, 0.03)
+            sensor_id = _make_sensor_id()
+            local_aqi = max(0, current_aqi + random.randint(-15, 25))
+            if local_aqi < 50:
+                color = [16, 185, 129, 200]   # Emerald
+            elif local_aqi < 100:
+                color = [245, 158, 11, 200]   # Amber
+            else:
+                color = [239, 68, 68, 200]    # Red
+            sensor_data.append({
+                "lon": lon, "lat": lat,
+                "sensor_id": sensor_id,
+                "aqi": local_aqi,
+                "color": color,
+                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
+            })
 
     # -------------------------------------------------------------------------
     # 5. Satellite indices (synthetic)
@@ -480,6 +580,62 @@ def generate_mock_data(
 # ---------------------------------------------------------------------------
 # Private tooltip / ID helpers  (keeps long HTML strings out of business logic)
 # ---------------------------------------------------------------------------
+
+def _fetch_openaq_sensors(
+    center_lat: float,
+    center_lon: float,
+    base_aqi: int,
+    radius_m: int = 25_000,
+    limit: int = 25,
+) -> list:
+    """
+    Fetch real AQ monitoring station locations from OpenAQ v3.
+
+    Sensor coordinates are real; the AQI value is the live Open-Meteo figure
+    perturbed per sensor (same approach as before, but anchored to a real location).
+    Returns [] on any error so the caller falls back to the synthetic version.
+    """
+    try:
+        resp = requests.get(
+            "https://api.openaq.org/v3/locations",
+            params={
+                "coordinates": f"{center_lat},{center_lon}",
+                "radius": radius_m,
+                "limit": limit,
+            },
+            headers={"accept": "application/json"},
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            print(f"OpenAQ returned status {resp.status_code}")
+            return []
+        sensor_data = []
+        for loc in resp.json().get("results", []):
+            coords = loc.get("coordinates", {})
+            lat = coords.get("latitude")
+            lon = coords.get("longitude")
+            if lat is None or lon is None:
+                continue
+            sensor_id = f"OAQ-{loc.get('id', _make_sensor_id())}"
+            local_aqi = max(0, base_aqi + random.randint(-15, 25))
+            if local_aqi < 50:
+                color = [16, 185, 129, 200]
+            elif local_aqi < 100:
+                color = [245, 158, 11, 200]
+            else:
+                color = [239, 68, 68, 200]
+            sensor_data.append({
+                "lon": lon, "lat": lat,
+                "sensor_id": sensor_id,
+                "aqi": local_aqi,
+                "color": color,
+                "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
+            })
+        return sensor_data
+    except Exception as e:
+        print(f"OpenAQ fetch failed: {e}")
+        return []
+
 
 def _make_sensor_id() -> str:
     """Generate a random AQ sensor ID without needing the Faker library."""
