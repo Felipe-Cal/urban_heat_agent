@@ -27,11 +27,8 @@ class CityData:
     df_forests: pd.DataFrame
     df_wetlands: pd.DataFrame
     df_sensors: pd.DataFrame
-    df_ndvi: pd.DataFrame
-    df_albedo: pd.DataFrame
     df_buildings: pd.DataFrame
     df_traffic: pd.DataFrame
-    df_population: pd.DataFrame
     resilience_score: int
     current_temp: float
     current_aqi: int
@@ -54,11 +51,8 @@ class LayerToggles:
     forests: bool = False
     wetlands: bool = False
     sensors: bool = False
-    ndvi: bool = False
-    albedo: bool = False
     buildings: bool = False
     traffic: bool = False
-    population: bool = False
 
     @classmethod
     def from_session_state(cls, state: dict) -> "LayerToggles":
@@ -75,11 +69,8 @@ class LayerToggles:
             forests=state.get("toggle_forests", False),
             wetlands=state.get("toggle_wetlands", False),
             sensors=state.get("toggle_sensors", False),
-            ndvi=state.get("toggle_ndvi", False),
-            albedo=state.get("toggle_albedo", False),
             buildings=state.get("toggle_buildings", False),
             traffic=state.get("toggle_traffic", False),
-            population=state.get("toggle_population", False),
         )
 
 

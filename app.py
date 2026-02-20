@@ -36,23 +36,26 @@ load_css()
 
 # City Data (Bio-Regions)
 CITIES = {
-    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437},
-    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060},
-    "London, UK":          {"lat": 51.5074,  "lon": -0.1278},
-    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503},
-    "Singapore":           {"lat": 1.3521,   "lon": 103.8198},
-    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333},
-    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777},
+    "Barcelona, Spain":    {"lat": 41.3851,  "lon": 2.1734},
     "Cairo, Egypt":        {"lat": 30.0444,  "lon": 31.2357},
+    "London, UK":          {"lat": 51.5074,  "lon": -0.1278},
+    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437},
+    "Madrid, Spain":       {"lat": 40.4168,  "lon": -3.7038},
     "Mexico City, Mexico": {"lat": 19.4326,  "lon": -99.1332},
+    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777},
+    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060},
+    "San Francisco, USA":  {"lat": 37.7749,  "lon": -122.4194},
+    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333},
+    "Singapore":           {"lat": 1.3521,   "lon": 103.8198},
     "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093},
+    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503},
 }
 
 # 4. Initialize Session State
 _state_defaults = {
     "user_session":       None,
 
-    "selected_city_name": "Los Angeles, USA",
+    "selected_city_name": "New York City, USA",
     "time_of_day":        "14:00",
     "pending_map_click":  None,
     "last_clicked_asset": None,
@@ -186,7 +189,7 @@ with st.sidebar:
 _ALL_LAYERS = [
     "thermal", "trees", "water", "parks", "shelters", "fountains",
     "green_roofs", "gardens", "forests", "wetlands", "sensors",
-    "ndvi", "albedo", "buildings", "traffic", "population",
+    "buildings", "traffic",
 ]
 for layer in _ALL_LAYERS:
     if f"toggle_{layer}" not in st.session_state:
@@ -452,7 +455,7 @@ with col_map:
     with ctrl4:
         st.markdown(
             f"**Air Quality Index**<br>"
-            f"<span style='font-size:1.8em; font-weight:600;'>AQI {city_data.current_aqi}</span><br>"
+            f"<span style='font-size:1.8em; font-weight:600;'>{city_data.current_aqi}</span><br>"
             f"<div style='height:8px; width:8px; border-radius:50%; background-color:#3b82f6; "
             f"display:inline-block; margin-right:4px;'></div>"
             f"<span style='color:#3b82f6; font-weight:500;'>Live</span>",
@@ -478,22 +481,17 @@ with col_map:
     map_placeholder = st.container()
 
     # Layer Toggles
-    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>SATELLITE INDICES</p>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: st.toggle("Thermal Heatmap",   key="toggle_thermal")
-    with c2: st.toggle("NDVI (Vegetation)", key="toggle_ndvi")
-    with c3: st.toggle("Albedo (Reflectance)", key="toggle_albedo")
+    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>MAP LAYERS</p>", unsafe_allow_html=True)
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        st.toggle("Thermal", key="toggle_thermal")
+    with r2:
+        st.toggle("Air Quality", key="toggle_sensors")
+    with r3:
+        st.toggle("Buildings", key="toggle_buildings")
+        st.toggle("Traffic", key="toggle_traffic")
 
-    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>PHYSICAL SENSORS</p>", unsafe_allow_html=True)
-    st.toggle("Air Quality Nodes", key="toggle_sensors")
-
-    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>URBAN DRIVERS & VULNERABILITY</p>", unsafe_allow_html=True)
-    d1, d2, d3 = st.columns(3)
-    with d1: st.toggle("Population Density", key="toggle_population")
-    with d2: st.toggle("Building Mass",       key="toggle_buildings")
-    with d3: st.toggle("Traffic Arteries",    key="toggle_traffic")
-
-    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE ID ASSETS</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE & ASSETS</p>", unsafe_allow_html=True)
     n1, n2, n3 = st.columns(3)
     with n1:
         st.toggle("Tree Canopy",       key="toggle_trees")

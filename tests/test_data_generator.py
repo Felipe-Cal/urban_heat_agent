@@ -118,8 +118,8 @@ class TestGenerateMockDataReturnType:
         df_fields = [
             "df_thermal", "df_trees", "df_water", "df_parks", "df_shelters",
             "df_fountains", "df_green_roofs", "df_gardens", "df_forests",
-            "df_wetlands", "df_sensors", "df_ndvi", "df_albedo",
-            "df_buildings", "df_traffic", "df_population",
+            "df_wetlands", "df_sensors",
+            "df_buildings", "df_traffic",
         ]
         for field_name in df_fields:
             val = getattr(result, field_name)
@@ -283,10 +283,9 @@ class TestRealThermalGrid:
         assert len(result.df_thermal_points) == 100, f"Expected 100 raw points, got {len(result.df_thermal_points)}"
 
     @patch("modules.data_generator.requests.get")
-    def test_thermal_grid_fallback_on_failure(self, mock_get):
+    def test_thermal_grid_empty_on_failure(self, mock_get):
         import requests as req_lib
-        
-        # Make the 3rd (thermal grid) raise a Timeout, and the 4th succeed for OSM
+
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
@@ -294,7 +293,5 @@ class TestRealThermalGrid:
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
-        # Fallback generates 300 synthetic points
-        assert len(result.df_thermal) == 300, "Fallback should generate 300 points"
-        assert not result.df_thermal.empty, "df_thermal should not be empty on failure"
-        assert len(result.df_thermal_points) == 100, "Fallback should generate 100 raw points"
+        assert result.df_thermal.empty, "df_thermal should be empty when thermal API fails"
+        assert result.df_thermal_points.empty, "df_thermal_points should be empty when thermal API fails"

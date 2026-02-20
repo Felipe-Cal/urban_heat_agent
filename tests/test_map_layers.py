@@ -40,11 +40,8 @@ def _empty_city_data() -> CityData:
         df_forests=empty,
         df_wetlands=empty,
         df_sensors=empty,
-        df_ndvi=pd.DataFrame(columns=["lon", "lat", "weight"]),
-        df_albedo=pd.DataFrame(columns=["lon", "lat", "weight"]),
         df_buildings=empty,
         df_traffic=empty,
-        df_population=empty,
         resilience_score=50,
         current_temp=25.0,
         current_aqi=40,
@@ -145,34 +142,20 @@ class TestLayerPresence:
         result = create_map(config)
         assert "Sensors" in self._layer_ids(result)
 
-    def test_ndvi_layer_added_when_toggled(self):
-        data = _empty_city_data()
-        data.df_ndvi = _weight_df()
-        config = MapConfig(data=data, toggles=LayerToggles(ndvi=True))
-        result = create_map(config)
-        assert "NDVI" in self._layer_ids(result)
-
-    def test_albedo_layer_added_when_toggled(self):
-        data = _empty_city_data()
-        data.df_albedo = _weight_df()
-        config = MapConfig(data=data, toggles=LayerToggles(albedo=True))
-        result = create_map(config)
-        assert "Albedo" in self._layer_ids(result)
-
     def test_multiple_layers_toggled_simultaneously(self):
         data = _empty_city_data()
         data.df_thermal = _weight_df()
         data.df_trees = _small_df()
-        data.df_ndvi = _weight_df()
+        data.df_sensors = _small_df()
         config = MapConfig(
             data=data,
-            toggles=LayerToggles(thermal=True, trees=True, ndvi=True),
+            toggles=LayerToggles(thermal=True, trees=True, sensors=True),
         )
         result = create_map(config)
         ids = self._layer_ids(result)
         assert "Thermal" in ids
         assert "Trees" in ids
-        assert "NDVI" in ids
+        assert "Sensors" in ids
 
     def test_empty_dataframe_prevents_layer_from_being_added(self):
         """Even if toggle is True, an empty DF should not add the layer (avoids pydeck errors)."""

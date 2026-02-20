@@ -202,16 +202,12 @@ def generate_mock_data(
         weights = 1.0 / dist_sq
         
         interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
-        
-        # Normalize the temperatures to maximize visual contrast of microclimates
-        min_t, max_t = np.min(interp_temps), np.max(interp_temps)
-        if max_t - min_t < 0.1:
-            max_t = min_t + 1.0
-            
+
+        t_lo, t_hi = -10.0, 45.0
         for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
             t += temp_variation
-            # map to [0.05, 0.5] range so overlapping points sum to ~1.0 instead of 10+
-            norm_t = 0.05 + 0.45 * (t - min_t) / (max_t - min_t)
+            frac = np.clip((t - t_lo) / (t_hi - t_lo), 0.0, 1.0)
+            norm_t = 0.05 + 0.45 * frac
             thermal_data.append([r_lon, r_lat, norm_t])
             
         for lon, lat, t in zip(lons, lats, raw_temps):
@@ -220,42 +216,8 @@ def generate_mock_data(
                 "lon": lon, "lat": lat, "temp": t,
                 "tooltip": _thermal_point_tooltip(lat, lon, t)
             })
-    else:
-        # Fallback to sparse synthetic grid
-        for _ in range(300):
-                lat = center_lat + np.random.normal(0, 0.02)
-                lon = center_lon + np.random.normal(0, 0.02)
-                distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-                uhi_effect = max(0.0, 8 - distance * 200)
-                temp = current_temp + random.uniform(0, uhi_effect)
-                weight = max(0.1, temp / max_theoretical_temp)
-                thermal_data.append([lon, lat, weight])
-                
-        # Fallback points
-        for lon, lat in zip(lons, lats):
-            temp = current_temp + random.uniform(0, 8)
-            thermal_points_data.append({
-                "lon": lon, "lat": lat, "temp": temp,
-                "tooltip": _thermal_point_tooltip(lat, lon, temp)
-            })
-
     df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
     df_thermal_points = pd.DataFrame(thermal_points_data)
-    
-    # Overwrite the base metric with the actual surface temperature average 
-    if not df_thermal_points.empty and "temp" in df_thermal_points.columns:
-        current_temp = float(df_thermal_points["temp"].mean())
-
-    # -------------------------------------------------------------------------
-    # 2b. Synthetic population density
-    # -------------------------------------------------------------------------
-    population_data = []
-    for _ in range(300):
-        p_lat = center_lat + np.random.normal(0, 0.025)
-        p_lon = center_lon + np.random.normal(0, 0.025)
-        distance = np.sqrt((p_lat - center_lat) ** 2 + (p_lon - center_lon) ** 2)
-        weight = max(10, 100 - distance * 3500) + random.randint(0, 20)
-        population_data.append({"lat": p_lat, "lon": p_lon, "weight": weight})
 
     # -------------------------------------------------------------------------
     # 3. OpenStreetMap — real nature + infrastructure assets
@@ -386,19 +348,6 @@ def generate_mock_data(
                     "tooltip": _building_tooltip(b_el["id"], height),
                 })
 
-        # Population density: replace synthetic Gaussian with real OSM building centroids.
-        # More floors -> more occupants -> higher density weight.
-        if building_data:
-            population_data = [
-                {
-                    "lat": b["lat"],
-                    "lon": b["lon"],
-                    "weight": max(10, b.get("height", 7.0) / 3.5 * 15),
-                }
-                for b in building_data
-                if b.get("lat") and b.get("lon")
-            ]
-
         # Traffic (PathLayer)
         for t_el in raw_traffic[:200]:
             if t_el.get("type") == "way" and t_el.get("geometry"):
@@ -517,7 +466,7 @@ def generate_mock_data(
             lat = center_lat + np.random.normal(0, 0.03)
             lon = center_lon + np.random.normal(0, 0.03)
             sensor_id = _make_sensor_id()
-            local_aqi = max(0, current_aqi + random.randint(-15, 25))
+            local_aqi = max(0, current_aqi)
             if local_aqi < 50:
                 color = [16, 185, 129, 200]   # Emerald
             elif local_aqi < 100:
@@ -532,26 +481,7 @@ def generate_mock_data(
                 "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon),
             })
 
-    # -------------------------------------------------------------------------
-    # 5. Satellite indices (synthetic)
-    # -------------------------------------------------------------------------
     _progress("Generating bio-regional data structures...", 90)
-
-    ndvi_data = []
-    for _ in range(400):
-        lat = center_lat + np.random.normal(0, 0.02)
-        lon = center_lon + np.random.normal(0, 0.02)
-        distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-        ndvi_val = min(1.0, 0.2 + distance * 10 + random.uniform(0, 0.2))
-        ndvi_data.append([lon, lat, ndvi_val])
-
-    albedo_data = []
-    for _ in range(400):
-        lat = center_lat + np.random.normal(0, 0.02)
-        lon = center_lon + np.random.normal(0, 0.02)
-        distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-        albedo_val = max(0.1, 0.8 - distance * 15 + random.uniform(-0.1, 0.1))
-        albedo_data.append([lon, lat, albedo_val])
 
     # -------------------------------------------------------------------------
     # 6. Climate resilience score
@@ -588,11 +518,8 @@ def generate_mock_data(
         df_forests=pd.DataFrame(forest_data),
         df_wetlands=pd.DataFrame(wetland_data),
         df_sensors=pd.DataFrame(sensor_data),
-        df_ndvi=pd.DataFrame(ndvi_data, columns=["lon", "lat", "weight"]),
-        df_albedo=pd.DataFrame(albedo_data, columns=["lon", "lat", "weight"]),
         df_buildings=pd.DataFrame(building_data),
         df_traffic=pd.DataFrame(traffic_data),
-        df_population=pd.DataFrame(population_data),
         resilience_score=resilience_score,
         current_temp=current_temp,
         current_aqi=current_aqi,
@@ -640,7 +567,7 @@ def _fetch_openaq_sensors(
             if lat is None or lon is None:
                 continue
             sensor_id = f"OAQ-{loc.get('id', _make_sensor_id())}"
-            local_aqi = max(0, base_aqi + random.randint(-15, 25))
+            local_aqi = max(0, base_aqi)
             if local_aqi < 50:
                 color = [16, 185, 129, 200]
             elif local_aqi < 100:

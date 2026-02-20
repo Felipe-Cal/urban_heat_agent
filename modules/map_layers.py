@@ -29,11 +29,10 @@ def create_map(config: MapConfig) -> pdk.Deck:
     # Satellite indices (heatmaps)
     # ------------------------------------------------------------------
     if toggles.thermal:
-        # Dynamically assign color palette based on real average temperature
-        if data.current_temp < 0:
-            color_range = [[247,251,255], [222,235,247], [198,219,239], [158,202,225], [107,174,214], [8,81,156]]
-        elif data.current_temp < 15:
-            color_range = [[255,255,212], [254,227,145], [254,196,79], [254,153,41], [217,95,14], [153,52,4]]
+        if data.current_temp < 15:
+            color_range = [[247, 251, 255], [222, 235, 247], [198, 219, 239], [158, 202, 225], [106, 81, 180], [75, 0, 130]]
+        elif data.current_temp < 25:
+            color_range = [[255, 255, 212], [254, 227, 145], [254, 196, 79], [254, 153, 41], [217, 95, 14], [153, 52, 4]]
         else:
             color_range = [[254, 235, 200], [253, 204, 138], [252, 141, 89], [227, 74, 51], [179, 0, 0]]
 
@@ -48,80 +47,6 @@ def create_map(config: MapConfig) -> pdk.Deck:
             intensity=1.0,
             radius_pixels=180,
             threshold=0.01,
-        ))
-
-        if not data.df_thermal_points.empty:
-            layers.append(pdk.Layer(
-                "ScatterplotLayer", id="ThermalPoints",
-                data=data.df_thermal_points,
-                get_position=["lon", "lat"],
-                get_radius=150,
-                get_fill_color="[255, 255, 255, 200]",
-                get_line_color="[0, 0, 0, 100]",
-                stroked=True,
-                line_width_min_pixels=1,
-                pickable=True,
-                auto_highlight=True,
-            ))
-
-    if toggles.ndvi and not data.df_ndvi.empty:
-        layers.append(pdk.Layer(
-            "HeatmapLayer", id="NDVI",
-            data=data.df_ndvi,
-            opacity=0.7,
-            get_position=["lon", "lat"],
-            get_weight="weight",
-            aggregation='"SUM"',
-            color_range=[
-                [247, 252, 245],
-                [229, 245, 224],
-                [199, 233, 192],
-                [161, 217, 155],
-                [116, 196, 118],
-                [65, 171, 93],
-            ],
-            intensity=1,
-            radius_pixels=70,
-        ))
-
-    if toggles.albedo and not data.df_albedo.empty:
-        layers.append(pdk.Layer(
-            "HeatmapLayer", id="Albedo",
-            data=data.df_albedo,
-            opacity=0.7,
-            get_position=["lon", "lat"],
-            get_weight="weight",
-            aggregation='"SUM"',
-            color_range=[
-                [80,  80,  80],
-                [140, 140, 140],
-                [190, 190, 190],
-                [230, 230, 230],
-                [255, 255, 204],
-                [255, 255, 102],
-            ],
-            intensity=1,
-            radius_pixels=70,
-        ))
-
-    if toggles.population and not data.df_population.empty:
-        layers.append(pdk.Layer(
-            "HeatmapLayer", id="Population",
-            data=data.df_population,
-            opacity=0.7,
-            get_position=["lon", "lat"],
-            get_weight="weight",
-            aggregation='"SUM"',
-            color_range=[
-                [241, 238, 246],
-                [208, 209, 230],
-                [166, 189, 219],
-                [116, 169, 207],
-                [43,  140, 190],
-                [4,   90,  141],
-            ],
-            intensity=1,
-            radius_pixels=60,
         ))
 
     # ------------------------------------------------------------------

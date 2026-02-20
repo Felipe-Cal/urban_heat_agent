@@ -30,7 +30,7 @@ except ImportError:
 _ALL_LAYERS = [
     "thermal", "trees", "water", "parks", "shelters", "fountains",
     "green_roofs", "gardens", "forests", "wetlands", "sensors",
-    "ndvi", "albedo", "buildings", "traffic", "population",
+    "buildings", "traffic",
 ]
 
 
