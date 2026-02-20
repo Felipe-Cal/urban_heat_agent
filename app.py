@@ -44,20 +44,22 @@ if 'pending_map_click' not in st.session_state:
 if 'last_clicked_asset' not in st.session_state:
     st.session_state.last_clicked_asset = None
 
+if 'sandbox_mode' not in st.session_state:
+    st.session_state.sandbox_mode = False
+if 'simulations' not in st.session_state:
+    st.session_state.simulations = []
+if 'simulated_cooling' not in st.session_state:
+    st.session_state.simulated_cooling = 0.0
+
 def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc):
-    with st.status(f"{action_desc} ({city_name})", expanded=True) as status:
-        st.write("🛰️ Synchronizing orbital thermal imaging...")
-        time.sleep(1.0)
-        st.write("🌍 Compiling OpenStreetMap infrastructure layers...")
-        time.sleep(3.0)
-        st.write("📡 Accessing Open-Meteo physical sensors...")
-        time.sleep(4.0)
-        st.write("🧬 Generating bio-regional data structures...")
+    progress_bar = st.progress(0, text=f"{action_desc} ({city_name})...")
+    
+    def update_progress(msg, pct):
+        progress_bar.progress(pct, text=f"{action_desc} ({city_name}) - {msg}")
         
-        data = generate_mock_data(lat, lon, time_of_day)
-        
-        status.update(state="complete", expanded=False)
-        return data
+    data = generate_mock_data(lat, lon, time_of_day, progress_callback=update_progress)
+    progress_bar.empty()
+    return data
 
 if 'data' not in st.session_state or len(st.session_state.data) != 19:
     city = CITIES[st.session_state.selected_city_name]
@@ -132,9 +134,24 @@ with col_agent:
             st.session_state.layer_toggles["trees"] = True
             st.rerun()
     with btn3:
-        if st.button("Verify Green\nBond Impact", use_container_width=True):
-            agent.simulate_verification()
-            st.rerun()
+        if st.session_state.sandbox_mode:
+            if st.button("🔴 Exit\nSandbox", use_container_width=True):
+                st.session_state.sandbox_mode = False
+                st.session_state.simulations = []
+                st.session_state.simulated_cooling = 0.0
+                st.rerun()
+        else:
+            if st.button("🌱 Launch\nSandbox", use_container_width=True):
+                st.session_state.sandbox_mode = True
+                st.rerun()
+                
+    if st.session_state.sandbox_mode:
+        st.info("🌱 **Sandbox Active:** Click on any building or road on the map to simulate a cooling intervention.")
+        if len(st.session_state.simulations) > 0:
+            if st.button("🗑️ Clear Interventions", use_container_width=True):
+                st.session_state.simulations = []
+                st.session_state.simulated_cooling = 0.0
+                st.rerun()
             
     if st.button("📄 Generate Briefing Report", use_container_width=True, type="primary"):
         st.session_state.generating_pdf = True
@@ -162,12 +179,17 @@ with col_agent:
     # Process Pending Map Clicks
     if st.session_state.pending_map_click:
         prompt = st.session_state.pending_map_click
+        obj = st.session_state.last_clicked_obj
         st.session_state.pending_map_click = None
+        
         with chat_container:
             with st.chat_message("user"):
                 st.markdown(prompt, unsafe_allow_html=True)
             with st.chat_message("assistant"):
-                agent.process_custom_query(prompt)
+                if st.session_state.sandbox_mode and obj:
+                    agent.simulate_intervention_on_asset(obj)
+                else:
+                    agent.process_custom_query(prompt)
 
     # Generic Chat Input
     if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
@@ -200,9 +222,13 @@ with col_map:
             st.rerun()
             
     with ctrl2:
-        st.metric("Resilience Score", f"{resilience_score}/100", "+2 pts")
+        bonus_score = int(len(st.session_state.simulations) * 1.5)
+        st.metric("Resilience Score", f"{resilience_score + bonus_score}/100", f"+{bonus_score} pts" if bonus_score > 0 else "")
     with ctrl3:
-        st.metric("Avg Surface Temp", f"{current_temp:.1f}°C", "Live")
+        cooling = st.session_state.simulated_cooling
+        delta = f"-{cooling:.1f}°C" if cooling > 0 else "Live"
+        delta_color = "normal" if cooling > 0 else "off"
+        st.metric("Avg Surface Temp", f"{current_temp - cooling:.1f}°C", delta, delta_color=delta_color)
     with ctrl4:
         st.metric("Air Quality Index", f"AQI {current_aqi}", "Live")
         
@@ -256,15 +282,27 @@ with col_map:
     selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object", key="main_map")
     
     if selection and selection.get("selection") and selection["selection"].get("objects"):
-        obj = selection["selection"]["objects"][0]
-        asset_id = obj.get('asset_id') or obj.get('sensor_id')
-        name = obj.get('name') or "Sensor Node"
-        asset_type = obj.get('type') or "System Telemetry"
-        
-        if asset_id and st.session_state.last_clicked_asset != asset_id:
-            st.session_state.last_clicked_asset = asset_id
-            st.session_state.pending_map_click = f"**[MAP EVENT]** I just clicked on: **{name}** (ID: `{asset_id}`, Type: `{asset_type}`). Analyze it for me."
-            st.rerun()
+        objects_dict = selection["selection"]["objects"]
+        obj = None
+        for layer_objects in objects_dict.values():
+            if layer_objects:
+                obj = layer_objects[0]
+                break
+                
+        if obj:
+            asset_id = obj.get('asset_id') or obj.get('sensor_id')
+            name = obj.get('name') or "Sensor Node"
+            asset_type = obj.get('type') or "System Telemetry"
+            
+            if asset_id and st.session_state.last_clicked_asset != asset_id:
+                st.session_state.last_clicked_asset = asset_id
+                st.session_state.last_clicked_obj = obj
+                
+                if st.session_state.sandbox_mode:
+                    st.session_state.pending_map_click = f"**[SANDBOX]** Simulate an intervention for **{name}** (Type: {asset_type})."
+                else:
+                    st.session_state.pending_map_click = f"**[MAP EVENT]** I just clicked on: **{name}** (ID: `{asset_id}`, Type: `{asset_type}`). Analyze it for me."
+                st.rerun()
 
     # --- LAYER TOGGLES ---
     st.markdown("<p style='font-size: 0.8em; color: #10b981; margin-bottom: 0; margin-top: 10px;'>SATELLITE INDICES</p>", unsafe_allow_html=True)

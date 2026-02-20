@@ -6,8 +6,9 @@ import requests
 
 fake = Faker()
 
-def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14:00"):
+def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14:00", progress_callback=None):
     """Generates mock data for Thermal, Trees, and Sensors layers centered on provided coordinates."""
+    if progress_callback: progress_callback("Initializing orbital thermal imaging...", 10)
     
     # Use provided coordinates
     CENTER_LAT = center_lat
@@ -100,6 +101,7 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
     building_data = []
     traffic_data = []
     
+    if progress_callback: progress_callback("Fetching OpenStreetMap infrastructure...", 30)
     try:
         # Query OSM for multiple nature elements within 8km of the city center
         radius_meters = 8000
@@ -147,6 +149,8 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
                 elif 'center' in el:
                     return el['center']['lat'], el['center']['lon']
                 return None, None
+
+            if progress_callback: progress_callback("Processing geospatial elements...", 50)
 
             # Group elements by type
             trees = [e for e in osm_data.get('elements', []) if e.get('tags', {}).get('natural') == 'tree']
@@ -286,6 +290,8 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
     if resilience_score == 0:
         resilience_score = random.randint(45, 65) 
 
+    if progress_callback: progress_callback("Accessing Open-Meteo physical sensors...", 75)
+
     # 3. Physical Sensors (Air Quality Nodes anchored to real AQI)
     sensor_data = []
     for _ in range(25):
@@ -315,6 +321,8 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
         
     df_sensors = pd.DataFrame(sensor_data)
     
+    if progress_callback: progress_callback("Generating bio-regional data structures...", 90)
+    
     # 4. Satellite Indices (Synthetic Heatmaps)
     # NDVI (Normalized Difference Vegetation Index) - Higher further from center, simulating greenery vs concrete
     ndvi_data = []
@@ -341,5 +349,7 @@ def generate_mock_data(center_lat=34.0522, center_lon=-118.2437, time_of_day="14
         albedo_data.append([lon, lat, albedo_val])
         
     df_albedo = pd.DataFrame(albedo_data, columns=['lon', 'lat', 'weight'])
+    
+    if progress_callback: progress_callback("Complete.", 100)
     
     return df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountains, df_green_roofs, df_gardens, df_forests, df_wetlands, df_sensors, df_ndvi, df_albedo, df_buildings, df_traffic, df_population, resilience_score, current_temp, current_aqi

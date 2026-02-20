@@ -288,6 +288,22 @@ def create_map(df_thermal, df_trees, df_water, df_parks, df_shelters, df_fountai
             radius_max_pixels=12
         )
         layers.append(sensor_layer_dot)
+        
+    # 12. Simulated Interventions (Sandbox Mode)
+    simulations = st.session_state.get('simulations', [])
+    if simulations:
+        sim_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=simulations,
+            get_position='[lon, lat]',
+            get_fill_color='color',
+            get_radius='radius',
+            pickable=True,
+            auto_highlight=True,
+            radius_min_pixels=15,
+            radius_max_pixels=50,
+        )
+        layers.append(sim_layer)
 
     # Base Map View
     view_state = pdk.ViewState(

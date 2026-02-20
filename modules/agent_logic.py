@@ -78,6 +78,64 @@ class AgentSimulator:
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
 
+    def simulate_intervention_on_asset(self, obj):
+        """Sandbox Scenario: Intervene on a specific map asset"""
+        asset_id = obj.get('asset_id', 'Unknown')
+        name = obj.get('name', 'Urban Asset')
+        asset_type = obj.get('type', 'Concrete Mass')
+        lat = obj.get('lat', 34.05)
+        lon = obj.get('lon', -118.24)
+        
+        self.add_message("user", f"**[SANDBOX]** Propose a cooling intervention for {name} ({asset_type}).")
+        st.session_state.agent_status = "REASONING"
+        
+        # Calculate impact based on type
+        cooling_offset = 0.0
+        energy_savings = 0
+        intervention_name = ""
+        color = [0, 255, 128, 200]
+        
+        if asset_type == "Concrete Mass":
+            intervention_name = "500m² Intensive Green Roof"
+            cooling_offset = 0.4
+            energy_savings = 12500
+            color = [163, 230, 53, 255] # Lime green
+        elif asset_type in ["Motorway", "Trunk", "Primary", "Road"] or "Transit" in name:
+            intervention_name = "Bioswale & Canopy Corridor"
+            cooling_offset = 0.7
+            energy_savings = 8400
+            color = [21, 128, 61, 255] # Forest green
+        else:
+            intervention_name = "Standard Albedo Enhancement"
+            cooling_offset = 0.2
+            energy_savings = 5000
+            color = [56, 189, 248, 255] # Sky blue
+            
+        # Add to state
+        st.session_state.simulated_cooling += cooling_offset
+        st.session_state.simulations.append({
+            'lat': lat,
+            'lon': lon,
+            'name': intervention_name,
+            'target': name,
+            'cooling': cooling_offset,
+            'color': color,
+            'radius': 250,
+            'tooltip': f"<b style='font-size: 14px; color: #10b981;'>Simulated Intervention</b><br/><span style='color:#94a3b8; font-size:11px;'>Target: {name}</span><br/><br/><b>Installed:</b> {intervention_name}<br/><b>Cooling Effect:</b> -{cooling_offset:.1f}°C"
+        })
+        
+        response = f"""
+        <div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>
+        <span style='color: #00e5ff;'>[ANALYZE]</span> Target: {name} (Surface type: {asset_type}) at {lat:.4f}, {lon:.4f}<br>
+        <span style='color: #00e5ff;'>[PROPOSE]</span> Intervention: {intervention_name}<br>
+        <span style='color: #10b981;'>[ROI MATH]</span> Est. Local Cooling: -{cooling_offset:.1f}°C<br>
+        <span style='color: #10b981;'>[ROI MATH]</span> Est. Annual Savings: ${energy_savings:,}
+        </div>
+        Intervention simulated. The dashboard metrics and map have been updated to reflect the new state.
+        """
+        self.add_message("assistant", response)
+        st.session_state.agent_status = "IDLE"
+
     def simulate_verification(self):
         """Scenario: Verify Green Bond"""
         self.add_message("user", "Verify Green Bond Impact")
