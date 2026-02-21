@@ -2,6 +2,8 @@ import random
 import streamlit as st
 import pandas as pd
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from modules.styles import load_css
 from modules.data_generator import generate_mock_data
 from modules.map_layers import create_map
@@ -21,22 +23,26 @@ load_css()
 
 # City Data (Bio-Regions)
 CITIES = {
-    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437},
-    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060},
-    "London, UK":          {"lat": 51.5074,  "lon": -0.1278},
-    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503},
-    "Singapore":           {"lat": 1.3521,   "lon": 103.8198},
-    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333},
-    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777},
-    "Cairo, Egypt":        {"lat": 30.0444,  "lon": 31.2357},
-    "Mexico City, Mexico": {"lat": 19.4326,  "lon": -99.1332},
-    "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093},
+    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437, "timezone": "America/Los_Angeles"},
+    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060,  "timezone": "America/New_York"},
+    "London, UK":          {"lat": 51.5074,  "lon": -0.1278,   "timezone": "Europe/London"},
+    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503,  "timezone": "Asia/Tokyo"},
+    "Singapore":           {"lat": 1.3521,   "lon": 103.8198,  "timezone": "Asia/Singapore"},
+    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333,  "timezone": "America/Sao_Paulo"},
+    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777,   "timezone": "Asia/Kolkata"},
+    "Cairo, Egypt":        {"lat": 30.0444,  "lon": 31.2357,   "timezone": "Africa/Cairo"},
+    "Mexico City, Mexico": {"lat": 19.4326,  "lon": -99.1332,  "timezone": "America/Mexico_City"},
+    "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093,  "timezone": "Australia/Sydney"},
 }
 
 # 3. Initialize Session State
+default_city_name = "Los Angeles, USA"
+default_tz = ZoneInfo(CITIES[default_city_name]["timezone"])
+default_time = datetime.now(default_tz).strftime("%H:00")
+
 _state_defaults = {
-    "selected_city_name": "Los Angeles, USA",
-    "time_of_day":        "14:00",
+    "selected_city_name": default_city_name,
+    "time_of_day":        default_time,
     "pending_map_click":  None,
     "last_clicked_asset": None,
     "last_clicked_obj":   None,          # Fix #4: was missing
@@ -283,6 +289,11 @@ with col_map:
         )
         if selected_city != st.session_state.selected_city_name:
             st.session_state.selected_city_name = selected_city
+
+            # Reset time to NOW in the new city's timezone
+            city_tz = ZoneInfo(CITIES[selected_city]["timezone"])
+            st.session_state.time_of_day = datetime.now(city_tz).strftime("%H:00")
+
             coords = CITIES[selected_city]
             st.session_state.data = fetch_data_with_loading(
                 coords["lat"], coords["lon"],
