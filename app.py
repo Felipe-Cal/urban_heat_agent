@@ -386,7 +386,7 @@ with col_map:
             simulations=st.session_state.simulations,
         )
         deck_map = create_map(map_config)
-        selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object", key="main_map")
+        selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object", key="main_map_v2")
 
         if selection and selection.get("selection") and selection["selection"].get("objects"):
             objects_dict = selection["selection"]["objects"]
