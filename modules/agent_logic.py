@@ -116,7 +116,6 @@ class AgentSimulator:
             f"Madrid, Spain; Mexico City, Mexico; Mumbai, India; New York City, USA; "
             f"San Francisco, USA; São Paulo, Brazil; Singapore; Sydney, Australia; Tokyo, Japan."
         )
-        )
         return {"role": "system", "content": content}
 
     # ------------------------------------------------------------------
@@ -165,7 +164,7 @@ class AgentSimulator:
         temp = getattr(data, "current_temp", 30.0) if data else 30.0
         resilience = getattr(data, "resilience_score", 50) if data else 50
 
-        self.add_message("user", f":material/bolt: Auto-Analyze {city} Bio-Region")
+        self.add_message("user", f"**[EVENT]** Node Connection: {city}")
         st.session_state.agent_status = "REASONING"
         
         if city == "New York City, USA":
@@ -175,10 +174,10 @@ class AgentSimulator:
                 "providing a high-integrity baseline for planning."
             )
             actions = (
-                "- **Planning & Simulation:** Since conditions are stable, we could run **interventions** in the Sandbox "
+                "1. **Planning & Simulation:** Since conditions are stable, we could run **interventions** in the Sandbox "
                 "to prepare for upcoming heatwaves.\n"
-                "- **Gap Analysis:** I can scan for **Data Deserts** to see where we can further densify the nervous system.\n"
-                "- **High-Risk Nodes:** Alternatively, we could switch to higher-risk regions like **Cairo, Egypt** or **Mexico City, Mexico** "
+                "2. **Gap Analysis:** I can scan for **Data Deserts** to see where we can further densify the nervous system.\n"
+                "3. **High-Risk Nodes:** Alternatively, we could switch to higher-risk regions like **Cairo, Egypt** or **Mexico City, Mexico** "
                 "where thermal stress is currently elevated."
             )
         elif city == "Cairo, Egypt":
@@ -187,9 +186,9 @@ class AgentSimulator:
                 "and Nature ID coverage shows significant gaps in dense urban tracts."
             )
             actions = (
-                "- **Emergency Response:** I can scan for **Cooling Centers** and verify their operational capacity.\n"
-                "- **Thermal Risk Mapping:** I can activate the **Thermal Heatmap** to identify the most critical friction points.\n"
-                "- **Simulate Interventions:** We can test the ROI of adding white roofs or urban forests in the hottest zones."
+                "1. **Emergency Response:** I can scan for **Cooling Centers** and verify their operational capacity.\n"
+                "2. **Thermal Risk Mapping:** I can activate the **Thermal Heatmap** to identify the most critical friction points.\n"
+                "3. **Simulate Interventions:** We can test the ROI of adding white roofs or urban forests in the hottest zones."
             )
         else:
             reasoning = (
@@ -197,25 +196,75 @@ class AgentSimulator:
                 f"Resilience Score of **{resilience}/100**."
             )
             actions = (
-                "- **Analyze Heat Islands:** I can scan for thermal anomalies and correlate them with canopy gaps.\n"
-                "- **Map Data Desserts:** I can identify areas in this region with insufficient sensor coverage.\n"
-                "- **Launch Sandbox:** We can simulate biological interventions to test ROI for cooling corridors."
+                "1. **Analyze Heat Islands:** I can scan for thermal anomalies and correlate them with canopy gaps.\n"
+                "2. **Map Data Desserts:** I can identify areas in this region with insufficient sensor coverage.\n"
+                "3. **Launch Sandbox:** We can simulate biological interventions to test ROI for cooling corridors."
             )
 
         response = (
-            f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 15px;'>"
-            f"**[SENSE]** Connected to {city} Node... Surface: {temp:.1f}°C | Resilience: {resilience}/100<br>"
-            f"**[REASON]** {reasoning}"
+            f"<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
+            f"<i>Profiling Regional Node: {city} [Surface: {temp:.1f}°C | Resilience: {resilience}/100]</i>"
             f"</div>"
-            f"**Gaia Node Briefing for {city}:**\n\n"
-            f"I have successfully established a regional data stream for this node. "
-            f"Conditions are currently **{'Good' if temp < 25 else 'Challenging'}**. "
-            f"Based on the current bio-regional mapping, here are my suggested next steps:\n\n"
+            f"{reasoning}\n\n"
+            f"**Suggested Next Steps:**\n\n"
             f"{actions}\n\n"
-            f"How would you like to proceed with the {city} resilience strategy?"
+            f"Please select an option (1-3) or ask a custom question regarding this region."
         )
         
         # No automated toggles here, as per user preference.
+        
+        self.add_message("assistant", response)
+        st.session_state.agent_status = "IDLE"
+
+    def analyze_asset(self, obj: dict) -> None:
+        """Contextual reasoning for a specific map asset clicked by the user."""
+        asset_id = obj.get("asset_id", obj.get("id", "Unknown"))
+        name = obj.get("name", "Urban Asset")
+        asset_type = obj.get("type", "Infrastructure")
+        city = st.session_state.get("selected_city_name", "Current City")
+
+        self.add_message("user", f"**[EVENT]** Map intersection: {name} ({asset_type})")
+        st.session_state.agent_status = "REASONING"
+
+        # Construct contextual reasoning based on asset type
+        if asset_type in ("Tree", "Park", "Forest", "Garden"):
+            reasoning = f"The selected terrestrial asset (**{name}**) acts as a primary cooling anchor and localized carbon sink for the {city} Bio-Region."
+            actions = (
+                f"1. **Verify Vitality:** I can check the vegetative health index and recent satellite delta for this {asset_type}.\n"
+                f"2. **Assess Cooling Radius:** We can calculate its estimated localized temperature reduction.\n"
+                f"3. **Simulate Expansion:** Enter Sandbox mode to model the ROI of expanding this natural asset."
+            )
+        elif asset_type in ("Water", "Wetland", "Fountain"):
+            reasoning = f"The selected hydrological asset (**{name}**) provides evaporative cooling benefits and blue-green infrastructure value to the {city} node."
+            actions = (
+                f"1. **Thermal Scan:** Assess the evaporative cooling footprint of this water body on surrounding terrain.\n"
+                f"2. **Riparian Buffer Analysis:** Scan for adjacent concrete surfaces that could be converted to absorbing buffers.\n"
+                f"3. **Simulate Enhancement:** Enter Sandbox mode to model expanding its wetland periphery."
+            )
+        elif asset_type in ("Shelter", "Cooling Center"):
+            reasoning = f"The selected facility (**{name}**) serves as a critical relief node during acute thermal stress events in {city}."
+            actions = (
+                f"1. **Check Capacity:** I can query real-time availability and operating status.\n"
+                f"2. **Route Analysis:** Identify vulnerable populations within a 15-minute walking radius of this shelter.\n"
+                f"3. **Resource Allocation:** Simulate deploying additional emergency supplies to this node."
+            )
+        else: # Buildings, Roads, Traffic, etc
+            reasoning = f"The selected infrastructure (**{name}**) consists predominantly of impervious surfaces and contributes to localized thermal friction (Urban Heat Island effect)."
+            actions = (
+                f"1. **Thermal Scan:** I can assess the exact surface temperature anomaly of this specific asset.\n"
+                f"2. **Simulate Retrofit:** Enter Sandbox mode to model adding a green roof or applying high-albedo (cool) coatings.\n"
+                f"3. **Vulnerability Map:** Correlate this asset's heat retention with nearby population density."
+            )
+
+        response = (
+            f"<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
+            f"<i>Profiling {name} ({asset_type}) at {city} Node [ID: {asset_id}]</i>"
+            f"</div>"
+            f"{reasoning}\n\n"
+            f"**Suggested Next Steps:**\n\n"
+            f"{actions}\n\n"
+            f"Please select an option (1-3) or ask a custom question regarding this asset."
+        )
         
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
@@ -349,6 +398,13 @@ class AgentSimulator:
                     toggle_key = f"toggle_{layer_name.lower()}"
                     if toggle_key in st.session_state:
                         st.session_state[toggle_key] = action_type == "ACTIVATE"
+                
+                # Parse and apply city switching actions
+                city_switches = re.findall(r"\[ACTION:\s*SWITCH_CITY_([^\]]+)\]", assistant_response)
+                for city_name in city_switches:
+                    # We assume the name is valid as per CITIES list provided in prompt
+                    st.session_state.selected_city_name = city_name
+                    st.session_state.need_initial_analysis = True
 
             except Exception as e:
                 st.error("*[Connection Error]* Failed to reach Gaia Central Node.")

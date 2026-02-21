@@ -118,6 +118,7 @@ _state_defaults = {
     "map_bbox":           None,
     "light_mode":         False,
     "need_initial_analysis": True,
+    "last_fetched_city":  None,
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -292,8 +293,8 @@ def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radiu
     return data
 
 
-# Load data on first run (or if session data is missing / wrong type)
-if "data" not in st.session_state or not isinstance(st.session_state.data, CityData):
+# Load data on first run or if city changed
+if "data" not in st.session_state or st.session_state.get("last_fetched_city") != st.session_state.selected_city_name:
     city = CITIES[st.session_state.selected_city_name]
     st.session_state.data = fetch_data_with_loading(
         city["lat"], city["lon"],
@@ -302,6 +303,7 @@ if "data" not in st.session_state or not isinstance(st.session_state.data, CityD
         "Initializing Gaia Node",
         radius_meters=city.get("radius", 2500),
     )
+    st.session_state.last_fetched_city = st.session_state.selected_city_name
     activate_data_layers(st.session_state.data)
 
 if "agent" not in st.session_state:
@@ -344,6 +346,12 @@ with t2:
 # 40% Left (Agent), 60% Right (Map)
 col_agent, col_map = st.columns([4, 6], gap="large")
 
+# Re-instantiate the agent on every run so it picks up code changes during dev
+# (We pass chat history separately if needed, but AgentSimulator handles it internally)
+from modules.agent_logic import AgentSimulator
+
+
+
 # ==========================================
 # LEFT COLUMN: THE AGENT (THE PROXY)
 # ==========================================
@@ -363,41 +371,42 @@ with col_agent:
     # Unified chat + input container
     with st.container(border=True):
         chat_container = st.container(height=450, border=False)
+        
         with chat_container:
             for msg in st.session_state.chat_history:
                 avatar = ":material/person:" if msg["role"] == "user" else ":material/smart_toy:"
                 with st.chat_message(msg["role"], avatar=avatar):
-                    st.markdown(msg["content"], unsafe_allow_html=True)
+                    if msg["role"] == "user":
+                        st.markdown(msg['content'] + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(msg["content"], unsafe_allow_html=True)
 
         if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
             with chat_container:
                 with st.chat_message("user", avatar=":material/person:"):
-                    st.markdown(prompt, unsafe_allow_html=True)
+                    st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
             st.rerun()
 
     st.markdown("<br/>", unsafe_allow_html=True)
 
-    # Agent Action Shortcuts
-    st.markdown("<p style='font-size: 0.8em; color: #888;'>SUGGESTED ACTIONS</p>", unsafe_allow_html=True)
+    # Quick Actions
+    st.markdown("<p style='font-size: 0.8em; color: #888; font-weight: 600;'>QUICK ACTIONS</p>", unsafe_allow_html=True)
 
-    if st.button(":material/public: Auto-Analyze Region", use_container_width=True, type="primary"):
+    # Preferred Action (Primary/Blue)
+    if st.button(":material/public: Analyze City Heat Risk", use_container_width=True, type="primary"):
         agent.auto_analyze_region()
         st.rerun()
 
-    btn1, btn2, btn3 = st.columns(3)
-    with btn1:
-        if st.button(":material/radar: Scan for Data Desserts", use_container_width=True):
+    btn_col1, btn_col2 = st.columns(2)
+    
+    with btn_col1:
+        if st.button(":material/radar: Map Data Deserts", use_container_width=True):
             agent.simulate_deployment()
             st.session_state.toggle_sensors = True
             st.rerun()
-    with btn2:
-        if st.button(":material/thermostat: Detect Thermal Risk Areas", use_container_width=True):
-            agent.simulate_intervention()
-            st.session_state.toggle_trees = True
-            st.rerun()
-    with btn3:
+            
         if st.session_state.sandbox_mode:
             if st.button(":material/cancel: Exit Sandbox", use_container_width=True):
                 st.session_state.sandbox_mode = False
@@ -411,7 +420,19 @@ with col_agent:
                 st.session_state.sandbox_mode = True
                 st.rerun()
 
+    with btn_col2:
+        if st.button(":material/thermostat: Map Thermal Risk", use_container_width=True):
+            agent.simulate_intervention()
+            st.session_state.toggle_trees = True
+            st.rerun()
+            
+        if st.button(":material/summarize: Generate Briefing", use_container_width=True):
+            st.session_state.generating_pdf = True
+            st.rerun()
+
+    # Optional Sandbox Active Info
     if st.session_state.sandbox_mode:
+        st.markdown("<br/>", unsafe_allow_html=True)
         st.info(
             f"**Sandbox Active:** Click map to simulate interventions. "
             f"| **Budget Remaining:** **${st.session_state.sandbox_budget:,.0f}**",
@@ -425,6 +446,9 @@ with col_agent:
                 st.session_state.sandbox_budget = 5_000_000.0
                 st.rerun()
 
+    st.markdown("<br/>", unsafe_allow_html=True)
+
+    # Supporting Data Structures (Ledger)
     with st.expander(
         "🔗 Green Ledger (Verifiable Data Provenance)",
         expanded=bool(st.session_state.green_ledger),
@@ -437,10 +461,6 @@ with col_agent:
         else:
             ledger_df = pd.DataFrame(st.session_state.green_ledger)
             st.dataframe(ledger_df, use_container_width=True, hide_index=True)
-
-    if st.button("📄 Generate Briefing Report", use_container_width=True, type="primary"):
-        st.session_state.generating_pdf = True
-        st.rerun()
 
     if st.session_state.generating_pdf:
         with st.spinner("Generating Professional PDF Briefing..."):
@@ -461,45 +481,6 @@ with col_agent:
             type="primary",
         )
 
-    # Process Pending Map Clicks
-    if st.session_state.pending_map_click:
-        prompt = st.session_state.pending_map_click
-        obj = st.session_state.last_clicked_obj
-        st.session_state.pending_map_click = None
-
-        with chat_container:
-            with st.chat_message("user", avatar=":material/person:"):
-                st.markdown(prompt, unsafe_allow_html=True)
-            with st.chat_message("assistant", avatar=":material/smart_toy:"):
-                if st.session_state.sandbox_mode and obj:
-                    agent.simulate_intervention_on_asset(obj)
-                elif obj:
-                    asset_id = obj.get("asset_id", "Unknown")
-                    name = obj.get("name", "Urban Asset")
-                    asset_type = obj.get("type", "Unknown Type")
-                    nature_id_hash = "0x" + "".join(random.choices("0123456789abcdef", k=8)) + "...1f"
-                    age = random.randint(5, 80) if "Tree" in asset_type or "Forest" in asset_type else "N/A"
-                    c02 = f"{random.randint(10, 500)} kg/yr" if age != "N/A" else "0 kg/yr"
-                    cooling_power = f"-{random.uniform(0.1, 2.5):.1f}°C"
-                    twin_response = (
-                        f"**Digital Twin Profile Loaded:** `{name}`"
-                        f"<div style='background-color: var(--background-color, #1e293b); padding: 10px; "
-                        f"border-radius: 5px; border-left: 3px solid #3b82f6; margin-top: 10px; "
-                        f"margin-bottom: 10px; font-family: monospace;'>"
-                        f"<b>Asset Type:</b> {asset_type}<br/>"
-                        f"<b>Nature ID Hash:</b> {nature_id_hash}<br/>"
-                        f"<b>Est. Age:</b> {age} years<br/>"
-                        f"<b>Carbon Seq:</b> {c02}<br/>"
-                        f"<b>Local Cooling:</b> <span style='color:#3b82f6;'>{cooling_power}</span><br/>"
-                        f"<b>Status:</b> Verified via Satellite"
-                        f"</div>"
-                        f"I have pulled the biometric profile from the Green Ledger. "
-                        f"This asset actively contributes to the '{st.session_state.selected_city_name}' Resilience Score."
-                    )
-                    agent.add_message("assistant", twin_response)
-                    st.markdown(twin_response, unsafe_allow_html=True)
-                else:
-                    agent.process_custom_query(prompt)
 
 # ==========================================
 # RIGHT COLUMN: THE BIOSPHERE (MAP & DATA)
@@ -750,6 +731,22 @@ with col_map:
         _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
         _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
 
+    # Process Pending Map Clicks AFTER toggles are drawn but BEFORE map rendering
+    # This ensures toggle state is preserved via rerun!
+    if st.session_state.pending_map_click:
+        prompt = st.session_state.pending_map_click
+        obj = st.session_state.last_clicked_obj
+        st.session_state.pending_map_click = None
+
+        if st.session_state.sandbox_mode and obj:
+            agent.simulate_intervention_on_asset(obj)
+        elif obj:
+            agent.analyze_asset(obj)
+        else:
+            agent.process_custom_query(prompt)
+            
+        st.rerun()
+
     with map_placeholder:
         map_config = MapConfig(
             data=city_data,
@@ -766,5 +763,17 @@ with col_map:
             key="main_map",
         )
 
-        # Selection logic (Note: MapLibre component doesn't yet support selection like PyDeck)
-        # We could implement this via clicking on features in the JS side and sending an event back.
+        # Parse the pydeck selection if valid objects are found
+        if hasattr(selection, "selection") and selection.selection.get("objects"):
+            objects = selection.selection["objects"]
+            for layer_id, objs in objects.items():
+                if objs and isinstance(objs, list):
+                    obj = objs[0]
+                    # Ensure we don't infinitely process the same click
+                    asset_id = obj.get("asset_id", obj.get("id", "Unknown"))
+                    if st.session_state.get("last_clicked_obj_id") != asset_id:
+                        obj_name = obj.get("name", "Urban Asset")
+                        st.session_state.pending_map_click = f"Selected {obj_name} ({asset_id})"
+                        st.session_state.last_clicked_obj = obj
+                        st.session_state.last_clicked_obj_id = asset_id
+                        st.rerun()

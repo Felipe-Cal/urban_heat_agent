@@ -229,9 +229,14 @@ def load_css(light_mode: bool = False):
            CHAT
         ════════════════════════ */
         div[data-testid="stChatMessage"] {{
+            background-color: transparent !important;
+            border: none !important;
+        }}
+        div[data-testid="stChatMessage"]:has(.user-msg-marker) {{
             background-color: {bg2} !important;
             border: 1.5px solid {border} !important;
             border-radius: 8px !important;
+            padding: 1rem !important;
         }}
         div[data-testid="stChatMessage"] * {{ color: {text} !important; }}
         div[data-testid*="chatAvatar"],
