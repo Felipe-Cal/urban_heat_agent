@@ -43,7 +43,7 @@ class CityData:
     df_sensors: pd.DataFrame
     df_buildings: pd.DataFrame
     df_traffic: pd.DataFrame
-    resilience_score: int
+
     current_temp: float
     current_aqi: int
     # Optional: surface-level error message from data fetching (e.g. OSM timeout)

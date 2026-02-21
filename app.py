@@ -1,4 +1,6 @@
 import random
+from typing import Optional, List, Dict, Any, Callable
+from datetime import datetime, time as dtime, timedelta
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -115,6 +117,7 @@ _state_defaults = {
     "map_viewport":       None,
     "map_bbox":           None,
     "light_mode":         False,
+    "need_initial_analysis": True,
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -272,7 +275,7 @@ def activate_data_layers(data: CityData) -> None:
     st.session_state["toggle_thermal"] = False
 
 
-def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radius_meters: int = 2500) -> CityData:
+def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radius_meters: int = 2500, existing_data: Optional[CityData] = None) -> CityData:
     progress_bar = st.progress(0, text=f"{action_desc} ({city_name})...")
 
     def update_progress(msg, pct):
@@ -283,6 +286,7 @@ def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radiu
         progress_callback=update_progress,
         openaq_api_key=st.secrets.get("OPENAQ_API_KEY"),
         radius_meters=radius_meters,
+        existing_data=existing_data,
     )
     progress_bar.empty()
     return data
@@ -302,6 +306,11 @@ if "data" not in st.session_state or not isinstance(st.session_state.data, CityD
 
 if "agent" not in st.session_state:
     st.session_state.agent = AgentSimulator()
+
+# Trigger Initial Analysis if needed
+if st.session_state.get("need_initial_analysis"):
+    st.session_state.agent.auto_analyze_region(st.session_state.data)
+    st.session_state.need_initial_analysis = False
 
 # Unpack data fields by name — no positional indexing
 city_data: CityData = st.session_state.data
@@ -519,43 +528,111 @@ with col_map:
             )
             activate_data_layers(st.session_state.data)
             city_data = st.session_state.data
+            st.session_state.need_initial_analysis = True
             st.rerun()
 
+    # ── Shared temporal calculations (used by Heat Risk + Avg Temp) ──────────
+    from datetime import datetime, time as dtime
+    t_now = get_city_local_time(st.session_state.selected_city_name)
+    frac_now = t_now.hour + (t_now.minute / 60.0)
+    t_sim = st.session_state.time_of_day
+    frac_sim = t_sim.hour + (t_sim.minute / 60.0)
+
+    def get_var(h): return -5.0 * np.cos((h - 4) * np.pi / 11.0)
+    sim_delta = get_var(frac_sim) - get_var(frac_now)
+
+    cooling = st.session_state.simulated_cooling
+    display_temp = city_data.current_temp + sim_delta - cooling
+    is_simulated = cooling > 0 or abs(sim_delta) > 0.1
+
+    # ── Heat Risk Index ───────────────────────────────────────────────────────
+    def compute_heat_risk(temp_c: float, aqi: int) -> tuple[int, str, str]:
+        """
+        Returns (score 0-100, label, hex_color).
+
+        Temperature thresholds follow WHO / US NWS heat-stress science:
+          < 27°C  → minimal risk baseline
+          27-32°C → caution zone
+          32-38°C → moderate heat stress
+          38-42°C → high heat stress
+          > 42°C  → extreme / danger
+
+        AQI multiplier (US EPA bands):
+          0-50   Good            → ×1.0
+          51-100 Moderate        → ×1.10
+          101-150 USG            → ×1.20
+          151-200 Unhealthy      → ×1.35
+          > 200  Very Unhealthy+ → ×1.50
+        """
+        # --- temperature component (0-100) ---
+        breakpoints = [
+            (27.0,  0.0),
+            (32.0, 25.0),
+            (38.0, 60.0),
+            (42.0, 85.0),
+        ]
+        if temp_c <= breakpoints[0][0]:
+            temp_score = 0.0
+        elif temp_c >= breakpoints[-1][0]:
+            temp_score = 100.0
+        else:
+            for i in range(len(breakpoints) - 1):
+                t_lo, s_lo = breakpoints[i]
+                t_hi, s_hi = breakpoints[i + 1]
+                if t_lo <= temp_c < t_hi:
+                    temp_score = s_lo + (s_hi - s_lo) * (temp_c - t_lo) / (t_hi - t_lo)
+                    break
+            else:
+                temp_score = 100.0
+
+        # --- AQI multiplier ---
+        if aqi <= 50:
+            aqi_mult = 1.00
+        elif aqi <= 100:
+            aqi_mult = 1.10
+        elif aqi <= 150:
+            aqi_mult = 1.20
+        elif aqi <= 200:
+            aqi_mult = 1.35
+        else:
+            aqi_mult = 1.50
+
+        score = int(min(100, temp_score * aqi_mult))
+
+        # --- label + colour ---
+        if score <= 25:
+            return score, "Low", "#10b981"       # green
+        elif score <= 50:
+            return score, "Moderate", "#f59e0b"  # amber
+        elif score <= 75:
+            return score, "High", "#f97316"      # orange
+        else:
+            return score, "Extreme", "#ef4444"   # red
+
+    heat_risk_score, heat_risk_label, heat_risk_color = compute_heat_risk(
+        display_temp, city_data.current_aqi
+    )
+    hr_status_color = "#10b981" if is_simulated else "#3b82f6"
+    hr_status_label = "Simulated" if is_simulated else "Live"
+
     with ctrl2:
-        bonus_score = int(len(st.session_state.simulations) * 1.5)
-        resilience_val = city_data.resilience_score + bonus_score
-        res_status_color = "#10b981" if bonus_score > 0 else "#3b82f6"
-        res_status_label = f"+{bonus_score} pts (Simulated)" if bonus_score > 0 else "Live"
         st.markdown(
-            f"**Resilience Score**<br>"
-            f"<span style='font-size:1.8em; font-weight:600;'>{resilience_val}/100</span><br>"
+            f"**Heat Risk Index**<br>"
+            f"<span style='font-size:1.8em; font-weight:600; color:{heat_risk_color};'>"
+            f"{heat_risk_score}/100</span>"
+            f"<span style='font-size:0.85em; font-weight:600; color:{heat_risk_color}; margin-left:6px;'>"
+            f"{heat_risk_label}</span><br>"
             f"<div style='display: flex; align-items: center; gap: 6px; margin-top: 4px;'>"
-            f"<div style='height:8px; width:8px; border-radius:50%; background-color:{res_status_color}; "
-            f"box-shadow: 0 0 6px {res_status_color}80;'></div>"
-            f"<span style='color:{res_status_color}; font-weight:500;'>{res_status_label}</span>"
+            f"<div style='height:8px; width:8px; border-radius:50%; background-color:{hr_status_color}; "
+            f"box-shadow: 0 0 6px {hr_status_color}80;'></div>"
+            f"<span style='color:{hr_status_color}; font-weight:500;'>{hr_status_label}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
     with ctrl3:
-        # Calculate simulation delta
-        from datetime import datetime, time as dtime
-        t_now = get_city_local_time(st.session_state.selected_city_name)
-        frac_now = t_now.hour + (t_now.minute / 60.0)
-        # Use session state time directly to avoid NameError
-        t_sim = st.session_state.time_of_day
-        frac_sim = t_sim.hour + (t_sim.minute / 60.0)
-        
-        # This matches the calculation in data_generator.py
-        def get_var(h): return -5.0 * np.cos((h - 4) * np.pi / 11.0)
-        sim_delta = get_var(frac_sim) - get_var(frac_now)
-        
-        cooling = st.session_state.simulated_cooling
-        display_temp = city_data.current_temp + sim_delta - cooling
-        
-        is_simulated = cooling > 0 or abs(sim_delta) > 0.1
         status_color = "#10b981" if is_simulated else "#3b82f6"
         status_label = f"{sim_delta - cooling:+.1f}°C (Simulated)" if is_simulated else "Live"
-        
+
         st.markdown(
             f"**Avg Surface Temp**<br>"
             f"<span style='font-size:1.8em; font-weight:600;'>{display_temp:.1f}°C</span><br>"
@@ -632,6 +709,7 @@ with col_map:
             st.session_state.selected_city_name,
             f"Simulating regional shift to {t_val.strftime('%H:%M')} for",
             radius_meters=coords.get("radius", 2500),
+            existing_data=st.session_state.data,
         )
         city_data = st.session_state.data
         st.rerun()
@@ -641,8 +719,6 @@ with col_map:
 
     d = city_data
     def _layer_toggle(label: str, key: str, has_data: bool) -> None:
-        if not has_data:
-            st.session_state[key] = False
         st.toggle(
             label + (" (no data)" if not has_data else ""),
             key=key,

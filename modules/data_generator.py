@@ -96,6 +96,7 @@ def generate_mock_data(
     openaq_api_key: Optional[str] = None,
     bbox: Optional[BBox] = None,
     radius_meters: int = 2000,
+    existing_data: Optional[CityData] = None,
 ) -> CityData:
     """
     Generate all map/dashboard data for a city snapshot.
@@ -105,6 +106,7 @@ def generate_mock_data(
         center_lon: Longitude of the city centre.
         time_of_day: Time string in "HH:MM" format.
         progress_callback: Optional callable(message, percent) for progress UI.
+        existing_data: Optional CityData to reuse infrastructure layers from.
 
     Returns:
         CityData dataclass with all DataFrames and scalar metrics.
@@ -290,6 +292,30 @@ def generate_mock_data(
     green_roofs, gardens, forests, wetlands = [], [], [], []
 
     _progress("Fetching OpenStreetMap infrastructure...", 30)
+
+    # --- DATA REUSE SHORTCUT ---
+    if existing_data and not existing_data.df_buildings.empty:
+        _progress("Reusing existing infrastructure layers...", 60)
+        return CityData(
+            df_thermal=df_thermal,
+            df_thermal_points=df_thermal_points,
+            df_trees=existing_data.df_trees,
+            df_water=existing_data.df_water,
+            df_parks=existing_data.df_parks,
+            df_shelters=existing_data.df_shelters,
+            df_fountains=existing_data.df_fountains,
+            df_green_roofs=existing_data.df_green_roofs,
+            df_gardens=existing_data.df_gardens,
+            df_forests=existing_data.df_forests,
+            df_wetlands=existing_data.df_wetlands,
+            df_sensors=existing_data.df_sensors,
+            df_buildings=existing_data.df_buildings,
+            df_traffic=existing_data.df_traffic,
+            current_temp=current_temp,
+            current_aqi=current_aqi,
+            fetch_error=fetch_error,
+        )
+
     try:
         if bbox:
             area_filter = f"({bbox.to_overpass_str()})"
@@ -540,23 +566,6 @@ def generate_mock_data(
 
     _progress("Generating bio-regional data structures...", 90)
 
-    # -------------------------------------------------------------------------
-    # 6. Climate resilience score
-    # -------------------------------------------------------------------------
-    score_trees = min(len(trees) * 0.1, 25)
-    score_parks = min(len(parks) * 1.0, 15)
-    score_forests = min(len(forests) * 2.0, 15)
-    score_water = min(len(water) * 1.5, 10)
-    score_wetlands = min(len(wetlands) * 3.0, 5)
-    score_gardens = min(len(gardens) * 1.0, 10)
-    score_green_roofs = min(len(green_roofs) * 2.0, 5)
-    score_shelters = min(len(shelters) * 2.0, 10)
-    score_fountains = min(len(fountains) * 1.0, 5)
-    resilience_score = int(
-        score_trees + score_parks + score_forests + score_water
-        + score_wetlands + score_gardens + score_green_roofs
-        + score_shelters + score_fountains
-    )
     _progress("Complete.", 100)
 
     return CityData(
@@ -574,7 +583,6 @@ def generate_mock_data(
         df_sensors=pd.DataFrame(sensor_data),
         df_buildings=pd.DataFrame(building_data),
         df_traffic=pd.DataFrame(traffic_data),
-        resilience_score=resilience_score,
         current_temp=current_temp,
         current_aqi=current_aqi,
         fetch_error=fetch_error,

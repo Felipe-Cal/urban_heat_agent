@@ -120,7 +120,7 @@ class TestBuildContext:
         ctx = agent._build_context()
         assert "city" in ctx
         assert "temp" in ctx
-        assert "resilience" in ctx
+        assert "aqi" in ctx
         assert "active_layers" in ctx
 
     def test_city_matches_session_state(self):

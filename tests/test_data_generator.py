@@ -72,11 +72,17 @@ def _make_ok_osm_response():
                 "tags": {"natural": "tree", "species": "Quercus agrifolia"},
             },
             {
-                "type": "node",
-                "id": 2,
-                "lat": 34.052,
-                "lon": -118.243,
-                "tags": {"natural": "tree"},
+                "type": "way",
+                "id": 100,
+                "nodes": [1, 2, 3, 1],
+                "geometry": [
+                    {"lat": 34.05, "lon": -118.24},
+                    {"lat": 34.052, "lon": -118.24},
+                    {"lat": 34.052, "lon": -118.242},
+                    {"lat": 34.05, "lon": -118.242},
+                ],
+                "tags": {"building": "yes", "height": "10"},
+                "center": {"lat": 34.051, "lon": -118.241},
             },
         ]
     }
@@ -125,10 +131,41 @@ class TestGenerateMockDataReturnType:
             val = getattr(result, field_name)
             assert isinstance(val, pd.DataFrame), f"{field_name} is not a DataFrame"
 
+    @patch("modules.data_generator.requests.get")
+    def test_reuses_infrastructure_data(self, mock_get):
+        # First call to get some real-ish data
+        mock_get.side_effect = [
+            _make_ok_meteo_response(),
+            _make_ok_aqi_response(),
+            _make_ok_thermal_response(),
+            _make_ok_osm_response(),
+        ]
+        original = generate_mock_data()
+        
+        # Second call passing the original data
+        # It should ONLY call meteo and thermal APIs, NOT OSM (which is the 4th call usually)
+        mock_get.reset_mock()
+        mock_get.side_effect = [
+            _make_ok_meteo_response(35.0),
+            _make_ok_aqi_response(100),
+            _make_ok_thermal_response(),
+        ]
+        
+        result = generate_mock_data(existing_data=original)
+        
+        assert result.current_temp == 35.0
+        assert result.current_aqi == 100
+        # Check that OSM dataframes are identical (by identity or at least content)
+        assert result.df_buildings is original.df_buildings
+        assert result.df_trees is original.df_trees
+        # Verification that OSM was NOT called: total calls should be 3 (meteo, aqi, thermal)
+        assert mock_get.call_count == 3
+
 
 class TestGenerateMockDataScalars:
     @patch("modules.data_generator.requests.get")
-    def test_resilience_score_is_int(self, mock_get):
+    def test_resilience_score_removed(self, mock_get):
+        """CityData no longer carries a resilience_score field (replaced by Heat Risk Index)."""
         mock_get.side_effect = [
             _make_ok_meteo_response(),
             _make_ok_aqi_response(),
@@ -136,20 +173,8 @@ class TestGenerateMockDataScalars:
             _make_ok_osm_response(),
         ]
         result = generate_mock_data()
-        assert isinstance(result.resilience_score, int)
-
-    @patch("modules.data_generator.requests.get")
-    def test_resilience_score_in_valid_range(self, mock_get):
-        mock_get.side_effect = [
-            _make_ok_meteo_response(),
-            _make_ok_aqi_response(),
-            _make_ok_thermal_response(),
-            _make_ok_osm_response(),
-        ]
-        result = generate_mock_data()
-        # Max theoretical score is 100; fallback random is 45-65
-        assert 0 <= result.resilience_score <= 100, (
-            f"resilience_score {result.resilience_score} out of [0, 100]"
+        assert not hasattr(result, "resilience_score"), (
+            "resilience_score should have been removed from CityData"
         )
 
     @patch("modules.data_generator.requests.get")

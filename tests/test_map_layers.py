@@ -42,7 +42,6 @@ def _empty_city_data() -> CityData:
         df_sensors=empty,
         df_buildings=empty,
         df_traffic=empty,
-        resilience_score=50,
         current_temp=25.0,
         current_aqi=40,
     )

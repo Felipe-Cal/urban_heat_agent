@@ -71,17 +71,17 @@ class AgentSimulator:
         Gather the current dashboard context into a plain dict.
 
         Returns:
-            Dict with keys: city, temp, resilience, active_layers (comma-joined str).
+            Dict with keys: city, temp, aqi, active_layers (comma-joined str).
         """
         city = st.session_state.get("selected_city_name", "Unknown City")
         temp: object = "Unknown"
-        resilience: object = "Unknown"
+        aqi: object = "Unknown"
 
         city_data = st.session_state.get("data")
         if city_data is not None:
             try:
                 temp = city_data.current_temp
-                resilience = city_data.resilience_score
+                aqi = city_data.current_aqi
             except Exception:
                 pass
 
@@ -89,7 +89,7 @@ class AgentSimulator:
         return {
             "city": city,
             "temp": temp,
-            "resilience": resilience,
+            "aqi": aqi,
             "active_layers": ", ".join(active) if active else "None",
         }
 
@@ -104,12 +104,18 @@ class AgentSimulator:
             f"<span style='color: #3b82f6; font-weight: 500;'>[SENSE]</span> when describing "
             f"reasoning steps if relevant, but otherwise respond naturally as an AI. "
             f"CURRENT SYSTEM CONTEXT - Avg Surface Temp: {ctx['temp']}°C | "
-            f"Resilience Score: {ctx['resilience']}/100 | "
+            f"Air Quality Index (AQI): {ctx['aqi']} | "
+            f"Active Map Layers: {ctx['active_layers']}. "
             f"Active Map Layers: {ctx['active_layers']}. "
             f"IMPORTANT: If the user asks to see or activate a layer, include the exact tag "
             f"[ACTION: ACTIVATE_{{LAYER_NAME}}] in your response. Available layers are: "
             f"THERMAL, TREES, WATER, PARKS, SHELTERS, FOUNTAINS, GREEN_ROOFS, GARDENS, "
-            f"FORESTS, WETLANDS, SENSORS. To deactivate, use [ACTION: DEACTIVATE_{{LAYER_NAME}}]."
+            f"FORESTS, WETLANDS, SENSORS. To deactivate, use [ACTION: DEACTIVATE_{{LAYER_NAME}}]. "
+            f"To switch to a different city, use the tag [ACTION: SWITCH_CITY_{{CITY_NAME}}]. "
+            f"Available cities are: Barcelona, Spain; Cairo, Egypt; London, UK; Los Angeles, USA; "
+            f"Madrid, Spain; Mexico City, Mexico; Mumbai, India; New York City, USA; "
+            f"San Francisco, USA; São Paulo, Brazil; Singapore; Sydney, Australia; Tokyo, Japan."
+        )
         )
         return {"role": "system", "content": content}
 
@@ -149,23 +155,68 @@ class AgentSimulator:
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
 
-    def auto_analyze_region(self) -> None:
-        """Scenario: Auto-Analyze and suggest top interventions."""
-        self.add_message("user", ":material/bolt: Auto-Analyze Region for Optimal Interventions")
-        st.session_state.agent_status = "REASONING"
+    def auto_analyze_region(self, data: Optional["CityData"] = None) -> None:
+        """Scan current region data and suggest top interventions."""
+        # Use provided data or fallback to session state
+        if data is None:
+            data = st.session_state.get("data")
+        
         city = st.session_state.get("selected_city_name", "This Region")
+        temp = getattr(data, "current_temp", 30.0) if data else 30.0
+        resilience = getattr(data, "resilience_score", 50) if data else 50
+
+        self.add_message("user", f":material/bolt: Auto-Analyze {city} Bio-Region")
+        st.session_state.agent_status = "REASONING"
+        
+        if city == "New York City, USA":
+            reasoning = (
+                "Thermal risk is currently **Minimal** due to low seasonal temperatures. "
+                "The NYC Bio-Region node has high sensor density and comprehensive Nature ID coverage, "
+                "providing a high-integrity baseline for planning."
+            )
+            actions = (
+                "- **Planning & Simulation:** Since conditions are stable, we could run **interventions** in the Sandbox "
+                "to prepare for upcoming heatwaves.\n"
+                "- **Gap Analysis:** I can scan for **Data Deserts** to see where we can further densify the nervous system.\n"
+                "- **High-Risk Nodes:** Alternatively, we could switch to higher-risk regions like **Cairo, Egypt** or **Mexico City, Mexico** "
+                "where thermal stress is currently elevated."
+            )
+        elif city == "Cairo, Egypt":
+            reasoning = (
+                "Thermal stress is currently **Elevated**. The Nile basin is experiencing a heat anomaly, "
+                "and Nature ID coverage shows significant gaps in dense urban tracts."
+            )
+            actions = (
+                "- **Emergency Response:** I can scan for **Cooling Centers** and verify their operational capacity.\n"
+                "- **Thermal Risk Mapping:** I can activate the **Thermal Heatmap** to identify the most critical friction points.\n"
+                "- **Simulate Interventions:** We can test the ROI of adding white roofs or urban forests in the hottest zones."
+            )
+        else:
+            reasoning = (
+                f"The {city} Node is fully operational. Preliminary ingestion establishes a "
+                f"Resilience Score of **{resilience}/100**."
+            )
+            actions = (
+                "- **Analyze Heat Islands:** I can scan for thermal anomalies and correlate them with canopy gaps.\n"
+                "- **Map Data Desserts:** I can identify areas in this region with insufficient sensor coverage.\n"
+                "- **Launch Sandbox:** We can simulate biological interventions to test ROI for cooling corridors."
+            )
+
         response = (
-            f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
-            f"**[SENSE]** Scanning {city} for extreme thermal anomalies and vulnerable populations.<br>"
-            f"**[REASON]** Correlating heat islands with lacking tree canopy and high density.<br>"
-            f"**[PLAN]** Generated 3 optimal interventions localized for maximum impact."
+            f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 15px;'>"
+            f"**[SENSE]** Connected to {city} Node... Surface: {temp:.1f}°C | Resilience: {resilience}/100<br>"
+            f"**[REASON]** {reasoning}"
             f"</div>"
-            f"**Top Suggested Interventions:**\n"
-            f"1. **Urban Forest Injection (Zone A):** +500 Trees near Highway Corridor. Est Cooling: -1.2°C.\n"
-            f"2. **Albedo Modification (Zone B):** 20,000 sq ft of white roofs in dense commercial center. Est Cooling: -0.8°C.\n"
-            f"3. **Emergency Cooling Center (Zone C):** Deploy active hydration/shelter node in highest risk tract.\n\n"
-            f"*Activating relevant layers for visual confirmation.*"
+            f"**Gaia Node Briefing for {city}:**\n\n"
+            f"I have successfully established a regional data stream for this node. "
+            f"Conditions are currently **{'Good' if temp < 25 else 'Challenging'}**. "
+            f"Based on the current bio-regional mapping, here are my suggested next steps:\n\n"
+            f"{actions}\n\n"
+            f"How would you like to proceed with the {city} resilience strategy?"
         )
+        
+        # No automated toggles here, as per user preference.
+        
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
 
@@ -328,7 +379,7 @@ class AgentSimulator:
             "content": (
                 f"You are the Gaia Heat Sync Agent. "
                 f"CURRENT SYSTEM CONTEXT - Avg Surface Temp: {ctx['temp']}°C | "
-                f"Resilience Score: {ctx['resilience']}/100 | "
+                f"Air Quality Index (AQI): {ctx['aqi']} | "
                 f"Active Map Layers: {ctx['active_layers']}."
             ),
         }
