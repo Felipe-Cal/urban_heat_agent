@@ -334,22 +334,27 @@ class AgentSimulator:
         self.add_message("user", f"**[EVENT]** Map intersection: {name} ({asset_type})")
         st.session_state.agent_status = "REASONING"
 
-        # Construct contextual reasoning based on asset type
-        if asset_type in ("Tree", "Park", "Forest", "Garden"):
+        # Robust asset classification
+        asset_type_l = asset_type.lower()
+        is_nature = any(k in asset_type_l for k in ("tree", "nature", "canopy", "park", "forest", "garden", "wood", "allotment", "plant"))
+        is_water = any(k in asset_type_l for k in ("water", "wetland", "fountain", "lake", "river", "marsh", "pool", "aquatic"))
+        is_emergency = any(k in asset_type_l for k in ("shelter", "cooling", "relief", "community", "emergency"))
+
+        if is_nature:
             reasoning = f"The selected terrestrial asset (**{name}**) acts as a primary cooling anchor and localized carbon sink for the {city} Bio-Region."
             actions = (
                 f"1. **Verify Vitality:** I can check the vegetative health index and recent satellite delta for this {asset_type}.\n"
                 f"2. **Assess Cooling Radius:** We can calculate its estimated localized temperature reduction.\n"
                 f"3. **Simulate Expansion:** Enter Sandbox mode to model the ROI of expanding this natural asset."
             )
-        elif asset_type in ("Water", "Wetland", "Fountain"):
+        elif is_water:
             reasoning = f"The selected hydrological asset (**{name}**) provides evaporative cooling benefits and blue-green infrastructure value to the {city} node."
             actions = (
                 f"1. **Thermal Scan:** Assess the evaporative cooling footprint of this water body on surrounding terrain.\n"
                 f"2. **Riparian Buffer Analysis:** Scan for adjacent concrete surfaces that could be converted to absorbing buffers.\n"
                 f"3. **Simulate Enhancement:** Enter Sandbox mode to model expanding its wetland periphery."
             )
-        elif asset_type in ("Shelter", "Cooling Center"):
+        elif is_emergency:
             reasoning = f"The selected facility (**{name}**) serves as a critical relief node during acute thermal stress events in {city}."
             actions = (
                 f"1. **Check Capacity:** I can query real-time availability and operating status.\n"
@@ -424,12 +429,16 @@ class AgentSimulator:
                 intervention_name = "Emergency Albedo Enhancement"
                 cooling_offset, cost, energy_savings, health_impact = 0.2, 50000, 5000, 0
         else:
-            if asset_type == "Concrete Mass":
+            asset_l = asset_type.lower()
+            if "concrete" in asset_l or "building" in asset_l:
                 intervention_name = "500m² Intensive Green Roof"
                 cooling_offset, energy_savings, health_impact, cost = 0.4, 12500, 1, 150000
-            elif asset_type in ("Motorway", "Trunk", "Primary", "Road") or "Transit" in name:
+            elif any(k in asset_l for k in ("road", "motorway", "trunk", "primary", "traffic")):
                 intervention_name = "Bioswale & Canopy Corridor"
                 cooling_offset, energy_savings, health_impact, cost = 0.7, 8400, 3, 300000
+            elif any(k in asset_l for k in ("tree", "nature", "canopy", "park")):
+                intervention_name = "Vegetative Health Enhancement"
+                cooling_offset, energy_savings, health_impact, cost = 0.3, 2000, 1, 25000
             else:
                 intervention_name = "Standard Albedo Enhancement"
                 cooling_offset, energy_savings, health_impact, cost = 0.2, 5000, 0, 50000
