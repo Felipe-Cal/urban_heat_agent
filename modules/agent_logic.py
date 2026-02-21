@@ -5,6 +5,7 @@ The AgentSimulator class handles all AI reasoning, chat history management,
 and sandbox simulation interactions. It uses a lazy-loaded OpenAI client
 and delegates context building to a single private helper to avoid repetition.
 """
+import json
 import os
 import random
 import re
@@ -106,17 +107,75 @@ class AgentSimulator:
             f"CURRENT SYSTEM CONTEXT - Avg Surface Temp: {ctx['temp']}°C | "
             f"Air Quality Index (AQI): {ctx['aqi']} | "
             f"Active Map Layers: {ctx['active_layers']}. "
-            f"Active Map Layers: {ctx['active_layers']}. "
-            f"IMPORTANT: If the user asks to see or activate a layer, include the exact tag "
-            f"[ACTION: ACTIVATE_{{LAYER_NAME}}] in your response. Available layers are: "
-            f"THERMAL, TREES, WATER, PARKS, SHELTERS, FOUNTAINS, GREEN_ROOFS, GARDENS, "
-            f"FORESTS, WETLANDS, SENSORS. To deactivate, use [ACTION: DEACTIVATE_{{LAYER_NAME}}]. "
-            f"To switch to a different city, use the tag [ACTION: SWITCH_CITY_{{CITY_NAME}}]. "
-            f"Available cities are: Barcelona, Spain; Cairo, Egypt; London, UK; Los Angeles, USA; "
-            f"Madrid, Spain; Mexico City, Mexico; Mumbai, India; New York City, USA; "
-            f"San Francisco, USA; São Paulo, Brazil; Singapore; Sydney, Australia; Tokyo, Japan."
+            f"You have access to tools to toggle map layers, switch cities, and query map data. "
+            f"Use these tools proactively to answer user queries factually or control the dashboard."
         )
         return {"role": "system", "content": content}
+
+    def _build_tools(self) -> list[dict]:
+        """Define OpenAI Function Calling schemas for map actions and data queries."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "toggle_map_layer",
+                    "description": "Activate or deactivate a specific map layer.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "layer_name": {"type": "string", "enum": ["thermal", "trees", "water", "parks", "shelters", "fountains", "green_roofs", "gardens", "forests", "wetlands", "sensors", "buildings", "traffic"]},
+                            "state": {"type": "boolean", "description": "True to activate, False to deactivate"}
+                        },
+                        "required": ["layer_name", "state"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "switch_city",
+                    "description": "Switch the planetary node to a different city.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city_name": {"type": "string", "enum": [
+                                "Barcelona, Spain", "Cairo, Egypt", "London, UK", "Los Angeles, USA",
+                                "Madrid, Spain", "Mexico City, Mexico", "Mumbai, India", "New York City, USA",
+                                "San Francisco, USA", "São Paulo, Brazil", "Singapore", "Sydney, Australia", "Tokyo, Japan"
+                            ]}
+                        },
+                        "required": ["city_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_urban_assets",
+                    "description": "Query the counts of specific urban asset types currently loaded in the map data.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "asset_type": {"type": "string", "enum": ["trees", "water", "parks", "shelters", "fountains", "green_roofs", "gardens", "forests", "wetlands", "sensors", "buildings", "traffic"]}
+                        },
+                        "required": ["asset_type"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_thermal_anomalies",
+                    "description": "Get the coordinates and temperatures of the highest heat points (thermal anomalies) in the current city data.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "top_n": {"type": "integer", "description": "Number of top anomalies to return. Default is 5.", "default": 5}
+                        }
+                    }
+                }
+            }
+        ]
 
     # ------------------------------------------------------------------
     # Simulation scenarios (no LLM — deterministic, fast)
@@ -129,23 +188,32 @@ class AgentSimulator:
         
         # MOCK ANNOTATIONS: Create 5 mock data deserts spread around the city center
         data = st.session_state.get("data")
-        lat = getattr(data, "center_lat", 34.05) if data else 34.05
-        lon = getattr(data, "center_lon", -118.24) if data else -118.24
+        lat, lon = 40.7128, -74.0060  # Fallback to NYC
+        if data and hasattr(data, "df_buildings") and not data.df_buildings.empty:
+            lat = float(data.df_buildings["lat"].mean())
+            lon = float(data.df_buildings["lon"].mean())
         
         import random
         st.session_state.map_annotations = [
-            {"lat": lat + random.uniform(-0.015, 0.015), "lon": lon + random.uniform(-0.015, 0.015), "radius": 150, "color": [59, 130, 246, 200]}
+            {
+                "lat": lat + random.uniform(-0.015, 0.015), 
+                "lon": lon + random.uniform(-0.015, 0.015), 
+                "radius": 150, 
+                "color": [59, 130, 246, 200],
+                "tooltip": "Optimal Node Location"
+            }
             for _ in range(5)
         ]
 
         response = (
-            "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
-            "**[SENSE]** Scanning for Data Deserts in Census Tract 242...<br>"
-            "**[PLAN]** Identified 8 optimal locations for Solar-IoT nodes.<br>"
-            "**[ACT]** Generating procurement request for open-standard sensors.<br>"
-            "**[ACT]** Protocol: VDP-Signed (Verified Data Provenance)."
+            "<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
+            "<i>Profiling Data Deserts in Census Tract 242</i>"
             "</div>"
-            "Deployment sequence initiated. Activating Sensor Grid overlay."
+            "**Strategic analysis complete.** I have identified 8 optimal locations for Solar-IoT nodes where our infrastructural awareness is weakest.\n\n"
+            "**Deployment Sequence Initiated:**\n\n"
+            "1. **Procurement:** Generating purchase request for open-standard sensors.\n"
+            "2. **Data Protocol:** Locking nodes to VDP-Signed (Verified Data Provenance).\n"
+            "3. **Map Overlay:** Activating Sensor Grid visualization on the active viewport."
         )
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
@@ -157,23 +225,33 @@ class AgentSimulator:
         
         # MOCK ANNOTATIONS: Create 3 mock thermal risk areas (larger radius)
         data = st.session_state.get("data")
-        lat = getattr(data, "center_lat", 34.05) if data else 34.05
-        lon = getattr(data, "center_lon", -118.24) if data else -118.24
+        lat, lon = 40.7128, -74.0060  # Fallback to NYC
+        if data and hasattr(data, "df_buildings") and not data.df_buildings.empty:
+            lat = float(data.df_buildings["lat"].mean())
+            lon = float(data.df_buildings["lon"].mean())
         
         import random
         st.session_state.map_annotations = [
-            {"lat": lat + random.uniform(-0.01, 0.01), "lon": lon + random.uniform(-0.01, 0.01), "radius": 250, "color": [239, 68, 68, 200]}
+            {
+                "lat": lat + random.uniform(-0.01, 0.01), 
+                "lon": lon + random.uniform(-0.01, 0.01), 
+                "radius": 250, 
+                "color": [239, 68, 68, 200],
+                "tooltip": "Thermal Risk Zone"
+            }
             for _ in range(3)
         ]
 
         response = (
-            "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
-            "**[SENSE]** Surface temp 49°C detected in proximity to schools.<br>"
-            "**[REASON]** High cardiovascular risk correlated with heat index.<br>"
-            "**[PLAN]** Strategy: 40 Coast Live Oaks + Reflective Albedo Coating.<br>"
-            "**[ROI]** Est. -3.2°C cooling | $1.2k annual energy savings."
+            "<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
+            "<i>Profiling Thermal Anomalies | Surface Temp: 49°C</i>"
             "</div>"
-            "Risk area detected. Proposing biological intervention. Activating Nature ID overlay."
+            "**Critical risk area detected.** A significant heat anomaly has been located in close proximity to multi-family housing and schools, correlating with a high cardiovascular risk profile.\n\n"
+            "**Proposed Biological Intervention:**\n\n"
+            "1. **Strategy:** Deploy 40 mature Coast Live Oaks + Reflective Albedo Coating.\n"
+            "2. **Est. ROI:** -3.2°C localized cooling offset.\n"
+            "3. **Capital Relief:** $1.2k annual energy savings across adjacent structures.\n\n"
+            "Activating Nature ID overlay on the high-risk zones."
         )
         self.add_message("assistant", response)
         st.session_state.agent_status = "IDLE"
@@ -307,21 +385,64 @@ class AgentSimulator:
         lat = obj.get("lat", 34.05)
         lon = obj.get("lon", -118.24)
 
-        self.add_message("user", f"**[SANDBOX]** Propose a cooling intervention for {name} ({asset_type}).")
+        city_data = st.session_state.get("data")
+        surface_temp = getattr(city_data, "current_temp", 35.0) if city_data else 35.0
+
+        user_prompt = f"**[SANDBOX]** Propose a cooling intervention for {name} ({asset_type}) at {lat}, {lon}."
+        self.add_message("user", user_prompt)
         st.session_state.agent_status = "REASONING"
 
-        # Determine intervention parameters by asset type
-        if asset_type == "Concrete Mass":
-            intervention_name = "500m² Intensive Green Roof"
-            cooling_offset, energy_savings, health_impact, cost = 0.4, 12500, 1, 150000
-            color = [163, 230, 53, 255]
-        elif asset_type in ("Motorway", "Trunk", "Primary", "Road") or "Transit" in name:
-            intervention_name = "Bioswale & Canopy Corridor"
-            cooling_offset, energy_savings, health_impact, cost = 0.7, 8400, 3, 300000
-            color = [21, 128, 61, 255]
+        client = self.get_client()
+        if client:
+            system_prompt = {
+                "role": "system",
+                "content": (
+                    f"You are the Gaia Heat Sync Agent planning an intervention for a {asset_type} "
+                    f"called '{name}'. The regional average surface temp is {surface_temp:.1f}°C. "
+                    f"Return ONLY a strictly formatted JSON object with the following keys: "
+                    f"intervention_name (string), cooling_offset (float, positive value representing degrees C reduction), "
+                    f"cost (integer in USD), energy_savings (integer in USD), health_impact (integer representing ER visits avoided). "
+                    f"Be realistic and specific. For example, a bioswale might reduce temp by 0.7C and cost 300,000 USD."
+                )
+            }
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[system_prompt, {"role": "user", "content": user_prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.7,
+                )
+                raw_json = response.choices[0].message.content
+                result = json.loads(raw_json)
+                
+                intervention_name = result.get("intervention_name", "Standard Albedo Enhancement")
+                cooling_offset = float(result.get("cooling_offset", 0.2))
+                cost = int(result.get("cost", 50000))
+                energy_savings = int(result.get("energy_savings", 5000))
+                health_impact = int(result.get("health_impact", 0))
+            except Exception as e:
+                intervention_name = "Emergency Albedo Enhancement"
+                cooling_offset, cost, energy_savings, health_impact = 0.2, 50000, 5000, 0
         else:
-            intervention_name = "Standard Albedo Enhancement"
-            cooling_offset, energy_savings, health_impact, cost = 0.2, 5000, 0, 50000
+            if asset_type == "Concrete Mass":
+                intervention_name = "500m² Intensive Green Roof"
+                cooling_offset, energy_savings, health_impact, cost = 0.4, 12500, 1, 150000
+            elif asset_type in ("Motorway", "Trunk", "Primary", "Road") or "Transit" in name:
+                intervention_name = "Bioswale & Canopy Corridor"
+                cooling_offset, energy_savings, health_impact, cost = 0.7, 8400, 3, 300000
+            else:
+                intervention_name = "Standard Albedo Enhancement"
+                cooling_offset, energy_savings, health_impact, cost = 0.2, 5000, 0, 50000
+
+        # Determine color based on type
+        inv_lower = intervention_name.lower()
+        if "roof" in inv_lower or "green" in inv_lower:
+            color = [163, 230, 53, 255]
+        elif "bioswale" in inv_lower or "tree" in inv_lower or "canopy" in inv_lower:
+            color = [21, 128, 61, 255]
+        elif "water" in inv_lower or "wetland" in inv_lower:
+            color = [56, 189, 248, 255]
+        else:
             color = [56, 189, 248, 255]
 
         # Update simulation state
@@ -394,8 +515,7 @@ class AgentSimulator:
     # ------------------------------------------------------------------
 
     def process_custom_query(self, query: str) -> None:
-        """Handle arbitrary user input, streaming from OpenAI if available."""
-        # Clear previous annotations as the user is initiating a new conversation topic
+        """Handle arbitrary user input, using function calling to interact with tools."""
         st.session_state.map_annotations = []
         
         self.add_message("user", query)
@@ -408,46 +528,133 @@ class AgentSimulator:
             messages = [system_prompt] + list(st.session_state.chat_history)
 
             try:
-                stream = client.chat.completions.create(
+                # First non-streaming call to get tool_calls
+                response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.7,
                     max_tokens=600,
-                    stream=True,
+                    tools=self._build_tools(),
+                    tool_choice="auto",
                 )
 
-                def _generate():
-                    for chunk in stream:
-                        delta = chunk.choices[0].delta.content
-                        if delta is not None:
-                            yield delta
+                response_message = response.choices[0].message
+                tool_calls = response_message.tool_calls
 
-                assistant_response = st.write_stream(_generate())
+                if tool_calls:
+                    messages.append(response_message)
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        try:
+                            function_args = json.loads(tool_call.function.arguments)
+                        except json.JSONDecodeError:
+                            function_args = {}
+                            
+                        if function_name == "toggle_map_layer":
+                            layer_name = function_args.get("layer_name")
+                            state = function_args.get("state")
+                            if layer_name is not None and state is not None:
+                                toggle_key = f"toggle_{layer_name.lower()}"
+                                if toggle_key in st.session_state:
+                                    st.session_state[toggle_key] = state
+                                messages.append({
+                                    "tool_call_id": tool_call.id,
+                                    "role": "tool",
+                                    "name": function_name,
+                                    "content": json.dumps({"status": "success", "message": f"Layer {layer_name} set to {state}"})
+                                })
+                            else:
+                                messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": function_name, "content": '{"error": "Missing layer_name or state"}'})
+                        
+                        elif function_name == "switch_city":
+                            city_name = function_args.get("city_name")
+                            if city_name:
+                                valid_cities = [
+                                    "Barcelona, Spain", "Cairo, Egypt", "London, UK", "Los Angeles, USA",
+                                    "Madrid, Spain", "Mexico City, Mexico", "Mumbai, India", "New York City, USA",
+                                    "San Francisco, USA", "São Paulo, Brazil", "Singapore", "Sydney, Australia", "Tokyo, Japan"
+                                ]
+                                best_match = city_name
+                                for valid in valid_cities:
+                                    if city_name.strip().lower() in valid.lower() or valid.lower() in city_name.strip().lower():
+                                        best_match = valid
+                                        break
+                                st.session_state.selected_city_name = best_match
+                                st.session_state.need_initial_analysis = True
+                                messages.append({
+                                    "tool_call_id": tool_call.id,
+                                    "role": "tool",
+                                    "name": function_name,
+                                    "content": json.dumps({"status": "success", "message": f"City switched to {best_match}"})
+                                })
+                            else:
+                                messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": function_name, "content": '{"error": "Missing city_name"}'})
+                        
+                        elif function_name == "query_urban_assets":
+                            asset_type = function_args.get("asset_type")
+                            city_data = st.session_state.get("data")
+                            count = 0
+                            if city_data and asset_type:
+                                df_name = f"df_{asset_type.lower()}"
+                                if hasattr(city_data, df_name):
+                                    df = getattr(city_data, df_name)
+                                    count = len(df)
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": json.dumps({"status": "success", "count": count, "asset_type": asset_type})
+                            })
+                            
+                        elif function_name == "get_thermal_anomalies":
+                            top_n = function_args.get("top_n", 5)
+                            city_data = st.session_state.get("data")
+                            anomalies = []
+                            if city_data and hasattr(city_data, "df_thermal_points") and not city_data.df_thermal_points.empty:
+                                df = city_data.df_thermal_points
+                                top_df = df.nlargest(top_n, 'temp')
+                                anomalies = top_df[['lat', 'lon', 'temp']].to_dict(orient='records')
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": json.dumps({"status": "success", "anomalies": anomalies})
+                            })
+                        else:
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": json.dumps({"error": f"Unknown tool: {function_name}"})
+                            })
+
+                    # Second streaming call after tool execution
+                    stream = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages,
+                        temperature=0.7,
+                        max_tokens=600,
+                        stream=True,
+                    )
+                    
+                    def _generate_stream():
+                        for chunk in stream:
+                            delta = chunk.choices[0].delta.content
+                            if delta is not None:
+                                yield delta
+                    assistant_response = st.write_stream(_generate_stream())
+                    
+                else:
+                    # No tool calls, standard streaming simulation
+                    content = response.choices[0].message.content or ""
+                    def _generate_synthetic():
+                        words = content.split(" ")
+                        for i, word in enumerate(words):
+                            yield word + (" " if i < len(words) - 1 else "")
+                            time.sleep(0.01)
+                    assistant_response = st.write_stream(_generate_synthetic())
+
                 self.add_message("assistant", assistant_response)
-
-                # Parse and apply any map layer actions from the response
-                actions = re.findall(r"\[ACTION:\s*(ACTIVATE|DEACTIVATE)_([A-Z_]+)\]", assistant_response)
-                for action_type, layer_name in actions:
-                    toggle_key = f"toggle_{layer_name.lower()}"
-                    if toggle_key in st.session_state:
-                        st.session_state[toggle_key] = action_type == "ACTIVATE"
-                
-                # Parse and apply city switching actions
-                city_switches = re.findall(r"\[ACTION:\s*SWITCH_CITY_([^\]]+)\]", assistant_response)
-                for city_name in city_switches:
-                    target = city_name.strip().lower()
-                    valid_cities = [
-                        "Barcelona, Spain", "Cairo, Egypt", "London, UK", "Los Angeles, USA",
-                        "Madrid, Spain", "Mexico City, Mexico", "Mumbai, India", "New York City, USA",
-                        "San Francisco, USA", "São Paulo, Brazil", "Singapore", "Sydney, Australia", "Tokyo, Japan"
-                    ]
-                    best_match = city_name
-                    for valid in valid_cities:
-                        if target in valid.lower() or valid.lower() in target:
-                            best_match = valid
-                            break
-                    st.session_state.selected_city_name = best_match
-                    st.session_state.need_initial_analysis = True
 
             except Exception as e:
                 st.error("*[Connection Error]* Failed to reach Gaia Central Node.")

@@ -275,3 +275,98 @@ class TestAutoAnalyzeRegion:
         agent.auto_analyze_region()
         last = _session_state["chat_history"][-1]["content"]
         assert "Mumbai" in last
+
+# ---------------------------------------------------------------------------
+# Tests: Tool Calling and LLM Integration
+# ---------------------------------------------------------------------------
+
+class TestLLMIntegration:
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_process_custom_query_toggle_layer_tool(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        # First call: Tool call response
+        mock_response = MagicMock()
+        mock_message = MagicMock()
+        
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_123"
+        mock_tool_call.function.name = "toggle_map_layer"
+        import json
+        mock_tool_call.function.arguments = json.dumps({"layer_name": "thermal", "state": True})
+        
+        mock_message.tool_calls = [mock_tool_call]
+        mock_message.content = ""
+        mock_response.choices = [MagicMock(message=mock_message)]
+        
+        # Second call: Streaming text response
+        mock_stream_response = MagicMock()
+        chunk1 = MagicMock()
+        chunk1.choices = [MagicMock(delta=MagicMock(content="Layer "))]
+        chunk2 = MagicMock()
+        chunk2.choices = [MagicMock(delta=MagicMock(content="enabled."))]
+        mock_stream_response.__iter__.return_value = iter([chunk1, chunk2])
+        
+        mock_client.chat.completions.create.side_effect = [
+            mock_response,
+            mock_stream_response
+        ]
+        
+        agent = AgentSimulator()
+        _session_state["toggle_thermal"] = False
+        
+        # Since st.write_stream uses a generator, we need to mock it to just concat
+        with patch("streamlit.write_stream", lambda g: "".join(list(g))):
+            agent.process_custom_query("Enable the thermal layer")
+        
+        # Verify state updated from tool execution
+        assert _session_state["toggle_thermal"] is True
+        
+        # Verify chat history
+        assert "Layer enabled." in _session_state["chat_history"][-1]["content"]
+
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_simulate_intervention_json_response(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_response = MagicMock()
+        import json
+        mock_response.choices = [
+            MagicMock(message=MagicMock(
+                content=json.dumps({
+                    "intervention_name": "AI Super Bioswale",
+                    "cooling_offset": 1.2,
+                    "cost": 100000,
+                    "energy_savings": 500,
+                    "health_impact": 5
+                })
+            ))
+        ]
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        agent = AgentSimulator()
+        
+        obj = {
+            "asset_id": "ROAD-1",
+            "name": "Main Auto Road",
+            "type": "Road",
+            "lat": 0.0,
+            "lon": 0.0,
+        }
+        
+        before_budget = _session_state["sandbox_budget"]
+        agent.simulate_intervention_on_asset(obj)
+        
+        assert len(_session_state["simulations"]) == 1
+        sim = _session_state["simulations"][-1]
+        
+        assert sim["name"] == "AI Super Bioswale"
+        assert sim["cooling"] == 1.2
+        assert _session_state["sandbox_budget"] == before_budget - 100000
+        
+        assert len(_session_state["green_ledger"]) == 1
+        ledger = _session_state["green_ledger"][-1]
+        assert ledger["Intervention"] == "AI Super Bioswale"
+        assert ledger["Cooling Impact (°C)"] == "-1.2"

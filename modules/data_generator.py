@@ -433,7 +433,7 @@ def generate_mock_data(
         raw_traffic = [e for e in elements if "highway" in e.get("tags", {})]
 
         # Buildings (PolygonLayer)
-        for b_el in raw_buildings[:500]:
+        for b_el in raw_buildings[:50000]:
             if b_el.get("type") == "way" and b_el.get("geometry"):
                 polygon = [[pt["lon"], pt["lat"]] for pt in b_el["geometry"]]
                 levels = max(1, int(b_el.get("tags", {}).get("building:levels", 1)))
@@ -451,7 +451,7 @@ def generate_mock_data(
                 })
 
         # Traffic (PathLayer)
-        for t_el in raw_traffic[:200]:
+        for t_el in raw_traffic[:50000]:
             if t_el.get("type") == "way" and t_el.get("geometry"):
                 path = [[pt["lon"], pt["lat"]] for pt in t_el["geometry"]]
                 lat, lon = get_coords(t_el)
@@ -466,7 +466,7 @@ def generate_mock_data(
                     "tooltip": _traffic_tooltip(t_el["id"], hw_type),
                 })
 
-        def process_assets(elements, data_list, asset_prefix, default_name, asset_type, color, limit=500):
+        def process_assets(elements, data_list, asset_prefix, default_name, asset_type, color, limit=50000):
             for element in elements[:limit]:
                 lat, lon = get_coords(element)
                 if lat is None or lon is None:
@@ -487,7 +487,7 @@ def generate_mock_data(
                 })
 
         # Trees — special handling for species
-        for element in trees[:1000]:
+        for element in trees[:50000]:
             lat, lon = get_coords(element)
             if lat is None or lon is None:
                 continue
@@ -505,15 +505,15 @@ def generate_mock_data(
                 "tooltip": _asset_tooltip(species, "TREE", element["id"], "Tree Canopy", impact_html),
             })
 
-        process_assets(water, water_data, "WATER", "Water Body", "Water Resource", "rgba(14, 165, 233, 0.8)", 500)
-        process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", "rgba(132, 204, 22, 0.8)", 500)
-        process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", "rgba(163, 230, 53, 0.8)", 200)
-        process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", "rgba(77, 124, 15, 0.8)", 300)
-        process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", "rgba(21, 128, 61, 0.8)", 200)
-        process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", "rgba(12, 74, 110, 0.8)", 100)
+        process_assets(water, water_data, "WATER", "Water Body", "Water Resource", "rgba(14, 165, 233, 0.8)", 50000)
+        process_assets(parks, park_data, "PARK", "Public Park", "Urban Park", "rgba(132, 204, 22, 0.8)", 50000)
+        process_assets(green_roofs, green_roof_data, "ROOF", "Green Roof", "Eco Infrastructure", "rgba(163, 230, 53, 0.8)", 50000)
+        process_assets(gardens, garden_data, "GARDEN", "Community Garden", "Bio-Asset", "rgba(77, 124, 15, 0.8)", 50000)
+        process_assets(forests, forest_data, "FOREST", "Urban Forest", "Woodland", "rgba(21, 128, 61, 0.8)", 50000)
+        process_assets(wetlands, wetland_data, "WETLAND", "Wetland", "Natural Marsh", "rgba(12, 74, 110, 0.8)", 50000)
 
         # Shelters — rich tag extraction (opening hours, capacity, AC, address)
-        for element in shelters[:200]:
+        for element in shelters[:50000]:
             lat, lon = get_coords(element)
             if lat is None or lon is None:
                 continue
@@ -531,7 +531,7 @@ def generate_mock_data(
             })
 
         # Fountains — rich tag extraction (operator, fee, wheelchair)
-        for element in fountains[:200]:
+        for element in fountains[:50000]:
             lat, lon = get_coords(element)
             if lat is None or lon is None:
                 continue

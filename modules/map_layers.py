@@ -159,12 +159,12 @@ def create_map(config: MapConfig) -> pdk.Deck:
             get_fill_color="color",
             get_radius="radius",
             stroked=True,
-            get_line_color="[255, 255, 255, 255]",
-            line_width_min_pixels=2,
+            get_line_color=[255, 255, 255, 255],
+            line_width_min_pixels=3,
             pickable=True,
             auto_highlight=True,
-            radius_min_pixels=20,
-            radius_max_pixels=60,
+            radius_min_pixels=30,
+            radius_max_pixels=100,
         ))
 
     # ------------------------------------------------------------------

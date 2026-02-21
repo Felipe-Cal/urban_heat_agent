@@ -21,10 +21,10 @@ except ImportError:
         def CookieManager(self): return None
     stx = DummyStx()
 
-# 1. Page Config
+# 1. Page Config - MUST BE FIRST
 st.set_page_config(
     page_title="Gaia Heat Sync | Planetary Intelligence",
-    page_icon=":material/bolt:",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -32,41 +32,54 @@ st.set_page_config(
 # 2. Supabase Auth Connection
 @st.cache_resource
 def init_supabase():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    try:
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
+        if not url or not key:
+            st.warning("⚠️ SUPABASE_URL or SUPABASE_KEY missing in secrets. Restricted mode active.")
+            return None
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Supabase init error: {e}")
+        return None
 
-try:
-    supabase = init_supabase()
-except Exception as e:
-    st.error(f"Failed to initialize Supabase. Please ensure SUPABASE_URL and SUPABASE_KEY are in .streamlit/secrets.toml. Error: {e}")
-    st.stop()
+supabase = init_supabase()
 
 # 3. Cookie Manager & Session Recovery
 def get_cookie_manager():
-    return stx.CookieManager()
+    try:
+        return stx.CookieManager()
+    except Exception as e:
+        st.warning(f"Cookie manager failed: {e}")
+        return None
 
 cookie_manager = get_cookie_manager()
 
 def restore_session():
+    if not supabase or not cookie_manager:
+        return
+
     if st.session_state.get("user_session"):
         return
 
     # extra-streamlit-components requires a small delay or multiple runs to get cookies
-    access_token = cookie_manager.get("sb-access-token")
-    refresh_token = cookie_manager.get("sb-refresh-token")
+    try:
+        access_token = cookie_manager.get("sb-access-token")
+        refresh_token = cookie_manager.get("sb-refresh-token")
 
-    if access_token and refresh_token:
-        try:
+        if access_token and refresh_token:
             response = supabase.auth.set_session(access_token, refresh_token)
             if response.user:
                 st.session_state["user_session"] = response.user
                 st.rerun()
-        except Exception as e:
-            # Token might be invalid or expired, just clear them
-            print(f"Session restoration failed: {e}")
+    except Exception as e:
+        # Token might be invalid or expired, just clear them
+        print(f"Session restoration failed: {e}")
+        try:
             cookie_manager.delete("sb-access-token")
             cookie_manager.delete("sb-refresh-token")
+        except:
+            pass
 
 restore_session()
 
@@ -106,6 +119,7 @@ _state_defaults = {
     "selected_city_name": "New York City, USA",
     "time_of_day":        get_city_local_time("New York City, USA"),
     "pending_map_click":  None,
+    "pending_quick_action": None,
     "last_clicked_asset": None,
     "last_clicked_obj":   None,
     "sandbox_mode":       False,
@@ -198,6 +212,9 @@ if not st.session_state.get("user_session"):
     st.markdown("<h3 style='text-align: center;'>Planetary Intelligence Platform</h3>", unsafe_allow_html=True)
     st.write("---")
     
+    if not supabase:
+        st.info("💡 Application is running in local mode (Supabase disconnected). Please log in with any credentials if simulated.")
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
@@ -247,6 +264,38 @@ with st.sidebar:
     st.write(f"Logged in as: `{st.session_state['user_session'].email}`")
     if st.button("Log Out"):
         handle_logout()
+
+# Process Pending Map Clicks and Actions BEFORE UI rendering
+# This ensures that updating toggle states (like toggle_sensors) happens before
+# Streamlit binds them to the frontend widgets.
+if st.session_state.pending_map_click:
+    prompt = st.session_state.pending_map_click
+    obj = st.session_state.last_clicked_obj
+    st.session_state.pending_map_click = None
+
+    if st.session_state.sandbox_mode and obj:
+        st.session_state.agent.simulate_intervention_on_asset(obj)
+    elif obj:
+        st.session_state.agent.analyze_asset(obj)
+    else:
+        st.session_state.agent.process_custom_query(prompt)
+        
+    st.rerun()
+
+if st.session_state.get("pending_quick_action"):
+    action = st.session_state.pending_quick_action
+    st.session_state.pending_quick_action = None
+    
+    if action == "data_deserts":
+        st.session_state.agent.simulate_deployment()
+        st.session_state.toggle_sensors = True
+    elif action == "thermal_risk":
+        st.session_state.agent.simulate_intervention()
+        st.session_state.toggle_trees = True
+    elif action == "auto_analyze":
+        st.session_state.agent.auto_analyze_region()
+        
+    st.rerun()
 
 
 # Layer toggles — all off by default on first page load.
@@ -399,15 +448,14 @@ with col_agent:
 
     # Preferred Action (Primary/Blue)
     if st.button(":material/public: Analyze City Heat Risk", use_container_width=True, type="primary"):
-        agent.auto_analyze_region()
+        st.session_state.pending_quick_action = "auto_analyze"
         st.rerun()
 
     btn_col1, btn_col2 = st.columns(2)
     
     with btn_col1:
         if st.button(":material/radar: Map Data Deserts", use_container_width=True):
-            agent.simulate_deployment()
-            st.session_state.toggle_sensors = True
+            st.session_state.pending_quick_action = "data_deserts"
             st.rerun()
             
         if st.session_state.sandbox_mode:
@@ -425,8 +473,7 @@ with col_agent:
 
     with btn_col2:
         if st.button(":material/thermostat: Map Thermal Risk", use_container_width=True):
-            agent.simulate_intervention()
-            st.session_state.toggle_trees = True
+            st.session_state.pending_quick_action = "thermal_risk"
             st.rerun()
             
         if st.button(":material/summarize: Generate Briefing", use_container_width=True):
@@ -709,6 +756,8 @@ with col_map:
             disabled=not has_data,
         )
 
+    # (Pending logic moved higher up the script to avoid UI mutation lock)
+
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>MAP LAYERS</p>", unsafe_allow_html=True)
     r1, r2, r3 = st.columns(3)
     with r1:
@@ -733,22 +782,6 @@ with col_map:
         _layer_toggle("Public Parks",      "toggle_parks",      not d.df_parks.empty)
         _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
         _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
-
-    # Process Pending Map Clicks AFTER toggles are drawn but BEFORE map rendering
-    # This ensures toggle state is preserved via rerun!
-    if st.session_state.pending_map_click:
-        prompt = st.session_state.pending_map_click
-        obj = st.session_state.last_clicked_obj
-        st.session_state.pending_map_click = None
-
-        if st.session_state.sandbox_mode and obj:
-            agent.simulate_intervention_on_asset(obj)
-        elif obj:
-            agent.analyze_asset(obj)
-        else:
-            agent.process_custom_query(prompt)
-            
-        st.rerun()
 
     with map_placeholder:
         map_config = MapConfig(
