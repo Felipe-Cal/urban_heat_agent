@@ -319,13 +319,12 @@ def generate_mock_data(
         df_thermal = pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"])
 
         # Synthetic Population (depends on building data later, but initial calc was synthetic)
-        population_data = []
-        for _ in range(300):
-            p_lat = center_lat + np.random.normal(0, 0.025)
-            p_lon = center_lon + np.random.normal(0, 0.025)
-            distance = np.sqrt((p_lat - center_lat) ** 2 + (p_lon - center_lon) ** 2)
-            weight = max(10, 100 - distance * 3500) + random.randint(0, 20)
-            population_data.append({"lat": p_lat, "lon": p_lon, "weight": weight})
+        pop_n = 300
+        p_lats = center_lat + np.random.normal(0, 0.025, pop_n)
+        p_lons = center_lon + np.random.normal(0, 0.025, pop_n)
+        p_dists = np.sqrt((p_lats - center_lat) ** 2 + (p_lons - center_lon) ** 2)
+        p_weights = np.maximum(10, 100 - p_dists * 3500) + np.random.randint(0, 21, pop_n)
+        df_population = pd.DataFrame({"lat": p_lats, "lon": p_lons, "weight": p_weights})
 
         # Process OSM
         # Wait for OSM result
@@ -418,7 +417,7 @@ def generate_mock_data(
         # Population density: replace synthetic Gaussian with real OSM building centroids.
         # More floors -> more occupants -> higher density weight.
         if building_data:
-            population_data = [
+            pop_data_list = [
                 {
                     "lat": b["lat"],
                     "lon": b["lon"],
@@ -427,6 +426,7 @@ def generate_mock_data(
                 for b in building_data
                 if b.get("lat") and b.get("lon")
             ]
+            df_population = pd.DataFrame(pop_data_list)
 
         # Traffic (PathLayer)
         for t_el in raw_traffic[:200]:
@@ -558,21 +558,22 @@ def generate_mock_data(
     # -------------------------------------------------------------------------
     _progress("Generating bio-regional data structures...", 90)
 
-    ndvi_data = []
-    for _ in range(400):
-        lat = center_lat + np.random.normal(0, 0.02)
-        lon = center_lon + np.random.normal(0, 0.02)
-        distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-        ndvi_val = min(1.0, 0.2 + distance * 10 + random.uniform(0, 0.2))
-        ndvi_data.append([lon, lat, ndvi_val])
+    # NDVI (Vectorized)
+    n_sat = 400
+    sat_lats = center_lat + np.random.normal(0, 0.02, n_sat)
+    sat_lons = center_lon + np.random.normal(0, 0.02, n_sat)
+    sat_dists = np.sqrt((sat_lats - center_lat) ** 2 + (sat_lons - center_lon) ** 2)
+    ndvi_noise = np.random.uniform(0, 0.2, n_sat)
+    ndvi_vals = np.minimum(1.0, 0.2 + sat_dists * 10 + ndvi_noise)
+    df_ndvi = pd.DataFrame({"lon": sat_lons, "lat": sat_lats, "weight": ndvi_vals})
 
-    albedo_data = []
-    for _ in range(400):
-        lat = center_lat + np.random.normal(0, 0.02)
-        lon = center_lon + np.random.normal(0, 0.02)
-        distance = np.sqrt((lat - center_lat) ** 2 + (lon - center_lon) ** 2)
-        albedo_val = max(0.1, 0.8 - distance * 15 + random.uniform(-0.1, 0.1))
-        albedo_data.append([lon, lat, albedo_val])
+    # Albedo (Vectorized)
+    alb_lats = center_lat + np.random.normal(0, 0.02, n_sat)
+    alb_lons = center_lon + np.random.normal(0, 0.02, n_sat)
+    alb_dists = np.sqrt((alb_lats - center_lat) ** 2 + (alb_lons - center_lon) ** 2)
+    alb_noise = np.random.uniform(-0.1, 0.1, n_sat)
+    albedo_vals = np.maximum(0.1, 0.8 - alb_dists * 15 + alb_noise)
+    df_albedo = pd.DataFrame({"lon": alb_lons, "lat": alb_lats, "weight": albedo_vals})
 
     # -------------------------------------------------------------------------
     # 6. Climate resilience score
@@ -608,11 +609,11 @@ def generate_mock_data(
         df_forests=pd.DataFrame(forest_data),
         df_wetlands=pd.DataFrame(wetland_data),
         df_sensors=pd.DataFrame(sensor_data),
-        df_ndvi=pd.DataFrame(ndvi_data, columns=["lon", "lat", "weight"]),
-        df_albedo=pd.DataFrame(albedo_data, columns=["lon", "lat", "weight"]),
+        df_ndvi=df_ndvi,
+        df_albedo=df_albedo,
         df_buildings=pd.DataFrame(building_data),
         df_traffic=pd.DataFrame(traffic_data),
-        df_population=pd.DataFrame(population_data),
+        df_population=df_population,
         resilience_score=resilience_score,
         current_temp=current_temp,
         current_aqi=current_aqi,
