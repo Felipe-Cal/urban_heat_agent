@@ -140,9 +140,6 @@ def maplibre_component(config):
             setStatus("ERR: " + e.message);
         }
 
-        function sendToStreamlit(v) {
-            window.parent.postMessage({ type: "streamlit:setComponentValue", value: v }, "*");
-        }
 
         let map;
         function init() {
@@ -172,8 +169,7 @@ def maplibre_component(config):
                     clearTimeout(st);
                     setStatus("LOADED: " + (config.layers ? config.layers.length : 0) + " L");
                     updateLayers(config.layers || []);
-                    setTimeout(() => { 
-                        sendBounds();
+                    setTimeout(() => {
                         statusEl.style.opacity = '0.5';
                     }, 500);
                 });
@@ -183,21 +179,11 @@ def maplibre_component(config):
                     console.error(e);
                 });
 
-                map.on('moveend', sendBounds);
             } catch (e) {
                 setStatus("EXC: " + e.message);
             }
         }
 
-        function sendBounds() {
-            if (!map) return;
-            const b = map.getBounds();
-            sendToStreamlit({
-                min_lat: b.getSouth(), min_lon: b.getWest(),
-                max_lat: b.getNorth(), max_lon: b.getEast(),
-                center: map.getCenter(), zoom: map.getZoom()
-            });
-        }
 
         function updateLayers(layers) {
             if (!map || !map.isStyleLoaded()) return;

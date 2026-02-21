@@ -299,7 +299,7 @@ def generate_mock_data(
             building_radius = f"(around:{radius_meters // 2},{center_lat},{center_lon})"
 
         query = f"""
-        [out:json][timeout:25];
+        [out:json][timeout:90];
         (
           node["natural"="tree"]{area_filter};
           nwr["natural"="water"]{area_filter};
@@ -325,18 +325,36 @@ def generate_mock_data(
         osm_data = _load_osm_cache(osm_cache_key)
 
         if osm_data is None:
-            response = requests.get(OVERPASS_URL, params={"data": query}, timeout=25)
-            if response.status_code == 200:
+            endpoints = [
+                OVERPASS_URL,
+                "https://lz4.overpass-api.de/api/interpreter",
+                "https://z.overpass-api.de/api/interpreter",
+                "https://overpass.kumi.systems/api/interpreter"
+            ]
+            response = None
+            
+            for endpoint in endpoints:
+                try:
+                    response = requests.get(endpoint, params={"data": query}, timeout=90)
+                    if response.status_code == 200:
+                        break
+                    else:
+                        print(f"Warning: Overpass endpoint {endpoint} returned {response.status_code}")
+                except Exception as e:
+                    print(f"Warning: Exception contacting {endpoint}: {e}")
+            
+            if response and response.status_code == 200:
                 osm_data = response.json()
                 _save_osm_cache(osm_cache_key, osm_data)
             else:
-                print(f"Warning: Overpass API returned status {response.status_code}")
-                if response.status_code == 504:
+                last_status = response.status_code if response else "Unknown"
+                print(f"Error: All Overpass endpoints failed. Last status: {last_status}")
+                if response and response.status_code == 504:
                     fetch_error = "\u23f3 OpenStreetMap Gateway Timeout (504). The query was too large."
-                elif response.status_code == 429:
+                elif response and response.status_code == 429:
                     fetch_error = "\u26a0\ufe0f OpenStreetMap rate-limited (429). Map loaded without Nature ID assets."
                 else:
-                    fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {response.status_code}."
+                    fetch_error = f"\u26a0\ufe0f OpenStreetMap Error {last_status}."
                 osm_data = {"elements": []}
         else:
             _progress("Loaded from local cache...", 50)
@@ -506,7 +524,7 @@ def generate_mock_data(
 
 
     except requests.exceptions.Timeout:
-        print("Error: Overpass API request timed out after 25 seconds.")
+        print("Error: Overpass API request timed out after 90 seconds.")
         fetch_error = "⏳ OpenStreetMap API response timed out. Map rendered using fallback data."
     except Exception as e:
         print(f"Error fetching OSM data: {e}")

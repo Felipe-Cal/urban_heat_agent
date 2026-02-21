@@ -7,7 +7,7 @@ import os
 from supabase import create_client, Client
 from modules.styles import load_css
 from modules.data_generator import generate_mock_data
-from modules.map_component import maplibre_component
+from modules.map_layers import create_map
 from modules.agent_logic import AgentSimulator
 from modules.models import CityData, LayerToggles, MapConfig, BBox
 import sys
@@ -68,24 +68,24 @@ def restore_session():
 
 restore_session()
 
-# 3. Load Styles
-load_css()
+# (load_css is called after session state is initialized so it can read light_mode)
 
 # City Data (Bio-Regions) with UTC Offsets
 CITIES = {
-    "Barcelona, Spain":    {"lat": 41.3851,  "lon": 2.1734,   "offset": 1},
-    "Cairo, Egypt":        {"lat": 30.0444,  "lon": 31.2357,  "offset": 2},
-    "London, UK":          {"lat": 51.5074,  "lon": -0.1278,  "offset": 0},
-    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437, "offset": -8},
-    "Madrid, Spain":       {"lat": 40.4168,  "lon": -3.7038,   "offset": 1},
-    "Mexico City, Mexico": {"lat": 19.4326,  "lon": -99.1332,  "offset": -6},
-    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777,   "offset": 5.5},
-    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060,  "offset": -5},
-    "San Francisco, USA":  {"lat": 37.7749,  "lon": -122.4194, "offset": -8},
-    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333,  "offset": -3},
-    "Singapore":           {"lat": 1.3521,   "lon": 103.8198,  "offset": 8},
-    "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093,  "offset": 11},
-    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503,  "offset": 9},
+    # radius: OSM fetch radius in metres — larger for sprawling cities
+    "Barcelona, Spain":    {"lat": 41.3851,  "lon": 2.1734,    "offset": 1,    "radius": 2500},
+    "Cairo, Egypt":        {"lat": 30.0444,  "lon": 31.2357,   "offset": 2,    "radius": 3500},
+    "London, UK":          {"lat": 51.5074,  "lon": -0.1278,   "offset": 0,    "radius": 3000},
+    "Los Angeles, USA":    {"lat": 34.0522,  "lon": -118.2437, "offset": -8,   "radius": 6000},
+    "Madrid, Spain":       {"lat": 40.4168,  "lon": -3.7038,   "offset": 1,    "radius": 3000},
+    "Mexico City, Mexico": {"lat": 19.4326,  "lon": -99.1332,  "offset": -6,   "radius": 4000},
+    "Mumbai, India":       {"lat": 19.0760,  "lon": 72.8777,   "offset": 5.5,  "radius": 3000},
+    "New York City, USA":  {"lat": 40.7128,  "lon": -74.0060,  "offset": -5,   "radius": 3500},
+    "San Francisco, USA":  {"lat": 37.7749,  "lon": -122.4194, "offset": -8,   "radius": 2500},
+    "São Paulo, Brazil":   {"lat": -23.5505, "lon": -46.6333,  "offset": -3,   "radius": 5000},
+    "Singapore":           {"lat": 1.3521,   "lon": 103.8198,  "offset": 8,    "radius": 2000},
+    "Sydney, Australia":   {"lat": -33.8688, "lon": 151.2093,  "offset": 11,   "radius": 3500},
+    "Tokyo, Japan":        {"lat": 35.6762,  "lon": 139.6503,  "offset": 9,    "radius": 3000},
 }
 
 def get_city_local_time(city_name):
@@ -105,7 +105,7 @@ _state_defaults = {
     "time_of_day":        get_city_local_time("New York City, USA"),
     "pending_map_click":  None,
     "last_clicked_asset": None,
-    "last_clicked_obj":   None,          # Fix #4: was missing
+    "last_clicked_obj":   None,
     "sandbox_mode":       False,
     "simulations":        [],
     "simulated_cooling":  0.0,
@@ -114,10 +114,14 @@ _state_defaults = {
     "generating_pdf":     False,
     "map_viewport":       None,
     "map_bbox":           None,
+    "light_mode":         False,
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
+
+# 3. Load Styles (here, after session state, so light_mode is available)
+load_css(light_mode=st.session_state.light_mode)
 
 # 5. Authentication UI Handlers
 
@@ -240,7 +244,8 @@ with st.sidebar:
         handle_logout()
 
 
-# Layer toggles — all off by default
+# Layer toggles — all off by default on first page load.
+# activate_data_layers() will turn on non-thermal layers once data is ready.
 _ALL_LAYERS = [
     "thermal", "trees", "water", "parks", "shelters", "fountains",
     "green_roofs", "gardens", "forests", "wetlands", "sensors",
@@ -250,8 +255,24 @@ for layer in _ALL_LAYERS:
     if f"toggle_{layer}" not in st.session_state:
         st.session_state[f"toggle_{layer}"] = False
 
+# Map from toggle name → CityData attribute
+_LAYER_DATA_FIELD = {
+    "trees": "df_trees",    "water": "df_water",   "parks": "df_parks",
+    "shelters": "df_shelters", "fountains": "df_fountains",
+    "green_roofs": "df_green_roofs", "gardens": "df_gardens",
+    "forests": "df_forests", "wetlands": "df_wetlands",
+    "sensors": "df_sensors", "buildings": "df_buildings", "traffic": "df_traffic",
+}
 
-def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, bbox=None) -> CityData:
+
+def activate_data_layers(data: CityData) -> None:
+    """Enable all layers with data, leave thermal OFF (too noisy by default)."""
+    for layer, field in _LAYER_DATA_FIELD.items():
+        st.session_state[f"toggle_{layer}"] = not getattr(data, field).empty
+    st.session_state["toggle_thermal"] = False
+
+
+def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radius_meters: int = 2500) -> CityData:
     progress_bar = st.progress(0, text=f"{action_desc} ({city_name})...")
 
     def update_progress(msg, pct):
@@ -261,7 +282,7 @@ def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, bbox=
         lat, lon, time_of_day,
         progress_callback=update_progress,
         openaq_api_key=st.secrets.get("OPENAQ_API_KEY"),
-        bbox=bbox,
+        radius_meters=radius_meters,
     )
     progress_bar.empty()
     return data
@@ -275,7 +296,9 @@ if "data" not in st.session_state or not isinstance(st.session_state.data, CityD
         st.session_state.time_of_day,
         st.session_state.selected_city_name,
         "Initializing Gaia Node",
+        radius_meters=city.get("radius", 2500),
     )
+    activate_data_layers(st.session_state.data)
 
 if "agent" not in st.session_state:
     st.session_state.agent = AgentSimulator()
@@ -300,13 +323,14 @@ if st.session_state.data.fetch_error:
 
 # --- MAIN LAYOUT ---
 # Theme Toggle at Top Right — pure CSS approach (no config.toml writes)
+# Note: no explicit st.rerun() needed — the button click already triggers a
+# Streamlit rerun, and load_css() will re-inject the correct theme CSS.
 t1, t2 = st.columns([95, 5])
 with t2:
     light_mode = st.session_state.get("light_mode", False)
     theme_icon = ":material/dark_mode:" if light_mode else ":material/light_mode:"
     if st.button("", icon=theme_icon, help="Toggle Theme"):
         st.session_state.light_mode = not light_mode
-        st.rerun()
 
 # 40% Left (Agent), 60% Right (Map)
 col_agent, col_map = st.columns([4, 6], gap="large")
@@ -483,13 +507,17 @@ with col_map:
         )
         if selected_city != st.session_state.selected_city_name:
             st.session_state.selected_city_name = selected_city
+            # Reset slider to the new city's current local time
+            st.session_state.time_of_day = get_city_local_time(selected_city)
             coords = CITIES[selected_city]
             st.session_state.data = fetch_data_with_loading(
                 coords["lat"], coords["lon"],
                 st.session_state.time_of_day,
                 selected_city,
                 "Establishing connection to",
+                radius_meters=coords.get("radius", 2500),
             )
+            activate_data_layers(st.session_state.data)
             city_data = st.session_state.data
             st.rerun()
 
@@ -595,6 +623,7 @@ with col_map:
             st.session_state.time_of_day.strftime("%H:%M"),
             st.session_state.selected_city_name,
             f"Simulating regional shift to {t_val.strftime('%H:%M')} for",
+            radius_meters=coords.get("radius", 2500),
         )
         city_data = st.session_state.data
         st.rerun()
@@ -645,8 +674,13 @@ with col_map:
             center_lon=CITIES[st.session_state.selected_city_name]["lon"],
             simulations=st.session_state.simulations,
         )
-        # Custom MapLibre component
-        maplibre_component(map_config)
+        deck_map = create_map(map_config)
+        selection = st.pydeck_chart(
+            deck_map,
+            on_select="rerun",
+            selection_mode="single-object",
+            key="main_map",
+        )
 
         # Selection logic (Note: MapLibre component doesn't yet support selection like PyDeck)
         # We could implement this via clicking on features in the JS side and sending an event back.
