@@ -5,11 +5,15 @@ A high-fidelity Streamlit dashboard for urban heat resilience, built for the Ope
 ## Features
 
 - **Live Data** — Real temperature & AQI from Open-Meteo; real geographic assets from OpenStreetMap
-- **Multi-Layer Map** — 16 toggleable layers (thermal, NDVI, albedo, population, buildings, traffic, nature assets)
+- **Multi-Layer Map** — 13 toggleable layers including thermal, buildings, traffic, and various nature assets (trees, parks, water, etc.)
 - **Gaia Agent** — GPT-4o-mini-powered AI agent for region analysis, interventions, and Q&A
 - **ROI Sandbox** — Click-to-simulate cooling interventions with cost/impact estimates
 - **Green Ledger** — Simulated Nature ID hashing and verifiable data provenance
 - **PDF Briefings** — Auto-generated professional briefing reports
+
+## Use Case Showcase
+
+The system demonstrates 14 key capabilities ranging from real-time environmental sensing to simulated parametric finance. For a detailed guide on how to test each feature, including known limitations and "what makes it real," please refer to the [Use Case Showcase Guide](USE_CASES.md).
 
 ## Setup
 
