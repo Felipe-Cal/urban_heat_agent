@@ -91,14 +91,14 @@ def load_css(light_mode: bool = False):
         /* ════════════════════════
            CONTAINERS / CARDS
         ════════════════════════ */
-        /* Outer container (st.container(border=True)) — the big box around
-           chat messages + chat input. Needs a clearly visible border in
-           light mode, so we use both border AND outline as a fallback. */
+        /* Outer container (st.container(border=True))
+           The Streamlit Emotion CSS sets border via a generated class.
+           We use box-shadow:inset which cannot be blocked by other CSS,
+           PLUS the regular border as backup. */
         div[data-testid="stVerticalBlockBorderWrapper"] {{
             background-color: {bg2} !important;
             border: 2px solid {border} !important;
-            outline: 2px solid {border} !important;
-            outline-offset: -2px;
+            box-shadow: inset 0 0 0 2px {border} !important;
             border-radius: 8px !important;
         }}
         div[data-testid="stExpander"],
@@ -185,43 +185,39 @@ def load_css(light_mode: bool = False):
         }}
 
         /* ════════════════════════
-           TOGGLES
-           The hidden <input type="checkbox"> must have NO background styling
-           (see INPUTS section above — we exclude [type="checkbox"]).
-           Streamlit's baseweb toggle applies dynamically coloured divs:
-             • ON  → primary colour (blue) via baseweb, works automatically
-             • OFF → secondaryBackground colour, may be invisible on light bg
-           We override with role-based selectors (most reliable without class names).
+           TOGGLES  —  definitive selectors from Baseweb src
+
+           From checkbox.BKgfzJZV.js (Streamlit's bundled Baseweb):
+             Input (hidden):  width:0, height:0, position:absolute  →  NOT targetable
+             ToggleTrack div: inline style includes border-top-left-radius:7px
+             Toggle (thumb):  inline style includes border-top-left-radius:50%
+           Both colours are set as inline backgroundColor via Styletron,
+           which we override with !important.
         ════════════════════════ */
+        /* Label text */
         div[data-testid="stToggle"] p,
         div[data-testid="stToggle"] span {{ color: {text} !important; }}
 
-        /* role=switch / role=checkbox — baseweb toggle track */
-        div[data-testid="stToggle"] [role="switch"],
-        div[data-testid="stToggle"] [role="checkbox"] {{
-            background-color: {_BORDER} !important; /* visible gray in both modes */
-            border-radius: 999px !important;
+        /* TRACK  — unique 7px corner radius in entire stToggle subtree */
+        div[data-testid="stToggle"] div[style*="border-top-left-radius: 7px"] {{
+            background-color: #64748b !important;  /* slate-500: visible on both light & dark */
+            border-radius: 7px !important;
         }}
-        div[data-testid="stToggle"] [role="switch"][aria-checked="true"],
-        div[data-testid="stToggle"] [role="checkbox"][aria-checked="true"] {{
-            background-color: #2563eb !important;
-        }}
-        /* Thumb */
-        div[data-testid="stToggle"] [role="switch"] > div,
-        div[data-testid="stToggle"] [role="checkbox"] > div {{
+        /* THUMB  — unique 50% corner radius, child of the track */
+        div[data-testid="stToggle"] div[style*="border-top-left-radius: 50%"] {{
             background-color: #ffffff !important;
             border-radius: 50% !important;
         }}
-        /* Disabled track */
-        div[data-testid="stToggle"] [role="switch"][aria-disabled="true"],
-        div[data-testid="stToggle"] [role="checkbox"][aria-disabled="true"] {{
-            background-color: {border} !important;
-            opacity: 0.55;
+        /* Disabled TRACK */
+        div[data-testid="stToggle"] input[disabled] ~ div div[style*="border-top-left-radius: 7px"],
+        div[data-testid="stToggle"] label[aria-disabled] div[style*="border-top-left-radius: 7px"] {{
+            background-color: #94a3b8 !important;
+            opacity: 0.6;
         }}
-        /* Disabled thumb */
-        div[data-testid="stToggle"] [role="switch"][aria-disabled="true"] > div,
-        div[data-testid="stToggle"] [role="checkbox"][aria-disabled="true"] > div {{
-            background-color: #cbd5e1 !important;
+        /* Disabled THUMB */
+        div[data-testid="stToggle"] input[disabled] ~ div div[style*="border-top-left-radius: 50%"],
+        div[data-testid="stToggle"] label[aria-disabled] div[style*="border-top-left-radius: 50%"] {{
+            background-color: #e2e8f0 !important;
         }}
 
         /* ════════════════════════
