@@ -35,7 +35,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
             opacity=0.8,
             get_position=["lon", "lat"],
             get_weight="weight",
-            aggregation='"SUM"',
+            aggregation="SUM",
             color_range=[
                 [254, 235, 200],
                 [253, 204, 138],
@@ -54,7 +54,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
             opacity=0.7,
             get_position=["lon", "lat"],
             get_weight="weight",
-            aggregation='"SUM"',
+            aggregation="SUM",
             color_range=[
                 [247, 252, 245],
                 [229, 245, 224],
@@ -74,7 +74,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
             opacity=0.7,
             get_position=["lon", "lat"],
             get_weight="weight",
-            aggregation='"SUM"',
+            aggregation="SUM",
             color_range=[
                 [80,  80,  80],
                 [140, 140, 140],
@@ -94,7 +94,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
             opacity=0.7,
             get_position=["lon", "lat"],
             get_weight="weight",
-            aggregation='"SUM"',
+            aggregation="SUM",
             color_range=[
                 [241, 238, 246],
                 [208, 209, 230],
