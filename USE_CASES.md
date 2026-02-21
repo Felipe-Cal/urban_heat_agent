@@ -77,7 +77,7 @@ Stakeholders visualise the Urban Heat Island (UHI) distribution across a city. T
 
 ### How to test
 1. Select **Los Angeles, CA** or **Singapore**
-2. Enable `Thermal Heatmap` layer (Satellite Indices panel)
+2. Enable `Thermal` layer (Map Layers section)
 3. Verify an irregular, asymmetric heat distribution (not a perfect circle)
 4. Open browser DevTools → Network → filter `open-meteo.com` → confirm the batch request with 100 comma-separated lat/lon pairs
 
