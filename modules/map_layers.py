@@ -236,14 +236,26 @@ def create_map(config: MapConfig) -> pdk.Deck:
         mapbox_api_key = st.secrets["mapbox"].get("access_token")
 
     if not mapbox_api_key:
-        map_style = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        # Fallback to Raster Tiles (Carto Positron) for robustness when no Mapbox key is present
+        # This prevents "STYLE TIMEOUT" errors with vector styles
+        map_provider = None
+        map_style = None
+        layers.insert(0, pdk.Layer(
+            "TileLayer",
+            data="https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+            min_zoom=0,
+            max_zoom=19,
+            opacity=1.0,
+        ))
     else:
+        map_provider = "mapbox"
         map_style = "mapbox://styles/mapbox/light-v10"
 
     return pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
         map_style=map_style,
+        map_provider=map_provider,
         api_keys={"mapbox": mapbox_api_key} if mapbox_api_key else None,
         tooltip=tooltip,
     )

@@ -94,7 +94,9 @@ class TestCreateMapReturnsValidDeck:
     def test_all_toggles_off_no_layers(self):
         config = _config_all_off()
         result = create_map(config)
-        assert result.layers == []
+        # Without Mapbox key, we expect a fallback TileLayer
+        assert len(result.layers) == 1
+        assert result.layers[0].type == "TileLayer"
 
     def test_view_state_uses_provided_coordinates(self):
         config = MapConfig(
