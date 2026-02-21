@@ -5,6 +5,7 @@ The AgentSimulator class handles all AI reasoning, chat history management,
 and sandbox simulation interactions. It uses a lazy-loaded OpenAI client
 and delegates context building to a single private helper to avoid repetition.
 """
+import html
 import os
 import random
 import re
@@ -168,9 +169,8 @@ class AgentSimulator:
 
     def simulate_intervention_on_asset(self, obj: dict) -> None:
         """Sandbox Scenario: Propose a cooling intervention on a specific map asset."""
-        asset_id = obj.get("asset_id", "Unknown")
-        name = obj.get("name", "Urban Asset")
-        asset_type = obj.get("type", "Concrete Mass")
+        name = html.escape(str(obj.get("name", "Urban Asset")))
+        asset_type = html.escape(str(obj.get("type", "Concrete Mass")))
         lat = obj.get("lat", 34.05)
         lon = obj.get("lon", -118.24)
 
@@ -262,7 +262,8 @@ class AgentSimulator:
 
     def process_custom_query(self, query: str) -> None:
         """Handle arbitrary user input, streaming from OpenAI if available."""
-        self.add_message("user", query)
+        safe_query = html.escape(query)
+        self.add_message("user", safe_query)
         st.session_state.agent_status = "REASONING"
 
         client = self.get_client()
@@ -301,7 +302,7 @@ class AgentSimulator:
                 self.add_message("assistant", f"**:material/error: [Connection Error]** {e}")
         else:
             time.sleep(1)
-            response = f"Simulated response to: '{query}'. (OpenAI API key not configured in secrets.toml)."
+            response = f"Simulated response to: '{safe_query}'. (OpenAI API key not configured in secrets.toml)."
             st.markdown(response)
             self.add_message("assistant", response)
 

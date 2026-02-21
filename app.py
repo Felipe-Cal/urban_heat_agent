@@ -1,3 +1,4 @@
+import html
 import random
 import streamlit as st
 import pandas as pd
@@ -242,8 +243,8 @@ with col_agent:
                     agent.simulate_intervention_on_asset(obj)
                 elif obj:
                     asset_id = obj.get("asset_id", "Unknown")
-                    name = obj.get("name", "Urban Asset")
-                    asset_type = obj.get("type", "Unknown Type")
+                    name = html.escape(str(obj.get("name", "Urban Asset")))
+                    asset_type = html.escape(str(obj.get("type", "Unknown Type")))
                     nature_id_hash = "0x" + "".join(random.choices("0123456789abcdef", k=8)) + "...1f"
                     age = random.randint(5, 80) if "Tree" in asset_type or "Forest" in asset_type else "N/A"
                     c02 = f"{random.randint(10, 500)} kg/yr" if age != "N/A" else "0 kg/yr"
@@ -398,8 +399,9 @@ with col_map:
 
             if obj:
                 asset_id = obj.get("asset_id") or obj.get("sensor_id")
-                name = obj.get("name") or "Sensor Node"
-                asset_type = obj.get("type") or "System Telemetry"
+                # Sanitize potentially unsafe user content from map data
+                name = html.escape(str(obj.get("name") or "Sensor Node"))
+                asset_type = html.escape(str(obj.get("type") or "System Telemetry"))
 
                 if asset_id and st.session_state.last_clicked_asset != asset_id:
                     st.session_state.last_clicked_asset = asset_id
