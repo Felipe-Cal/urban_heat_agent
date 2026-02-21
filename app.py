@@ -277,14 +277,8 @@ if st.session_state.pending_map_click:
     obj = st.session_state.last_clicked_obj
     st.session_state.pending_map_click = None
 
-    if st.session_state.sandbox_mode and obj:
-        st.session_state.agent.simulate_intervention_on_asset(obj)
-    elif obj:
-        st.session_state.agent.analyze_asset(obj)
-    else:
-        st.session_state.agent.process_custom_query(prompt)
-        
-    st.rerun()
+    # st.rerun() removed to avoid resetting layer toggles
+    pass
 
 if st.session_state.get("pending_quick_action"):
     action = st.session_state.pending_quick_action
@@ -299,7 +293,8 @@ if st.session_state.get("pending_quick_action"):
     elif action == "auto_analyze":
         st.session_state.agent.auto_analyze_region()
         
-    st.rerun()
+    # st.rerun() removed to avoid resetting layer toggles
+    pass
 
 
 # Layer toggles — all off by default on first page load.
