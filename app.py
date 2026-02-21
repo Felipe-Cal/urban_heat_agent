@@ -349,33 +349,39 @@ with col_map:
     # Layer Toggles
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>SATELLITE INDICES</p>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    with c1: st.toggle("Thermal Heatmap",   key="toggle_thermal")
-    with c2: st.toggle("NDVI (Vegetation)", key="toggle_ndvi")
-    with c3: st.toggle("Albedo (Reflectance)", key="toggle_albedo")
+    with c1:
+        st.toggle("Thermal Heatmap", key="toggle_thermal", help="Visualizes surface temperature variations across the city.")
+    with c2:
+        st.toggle("NDVI (Vegetation)", key="toggle_ndvi", help="Normalized Difference Vegetation Index - measures live green vegetation density.")
+    with c3:
+        st.toggle("Albedo (Reflectance)", key="toggle_albedo", help="Measures how well surfaces reflect solar energy. Higher values mean cooler surfaces.")
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>PHYSICAL SENSORS</p>", unsafe_allow_html=True)
-    st.toggle("Air Quality Nodes", key="toggle_sensors")
+    st.toggle("Air Quality Nodes", key="toggle_sensors", help="Locations of air quality monitoring sensors.")
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>URBAN DRIVERS & VULNERABILITY</p>", unsafe_allow_html=True)
     d1, d2, d3 = st.columns(3)
-    with d1: st.toggle("Population Density", key="toggle_population")
-    with d2: st.toggle("Building Mass",       key="toggle_buildings")
-    with d3: st.toggle("Traffic Arteries",    key="toggle_traffic")
+    with d1:
+        st.toggle("Population Density", key="toggle_population", help="Heatmap of population concentration.")
+    with d2:
+        st.toggle("Building Mass", key="toggle_buildings", help="3D representation of building structures and density.")
+    with d3:
+        st.toggle("Traffic Arteries", key="toggle_traffic", help="Major road networks and traffic flow patterns.")
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE ID ASSETS</p>", unsafe_allow_html=True)
     n1, n2, n3 = st.columns(3)
     with n1:
-        st.toggle("Tree Canopy",       key="toggle_trees")
-        st.toggle("Urban Forests",     key="toggle_forests")
-        st.toggle("Community Gardens", key="toggle_gardens")
+        st.toggle("Tree Canopy",       key="toggle_trees", help="Coverage of trees and urban forests.")
+        st.toggle("Urban Forests",     key="toggle_forests", help="Larger dense areas of vegetation.")
+        st.toggle("Community Gardens", key="toggle_gardens", help="Public garden spaces.")
     with n2:
-        st.toggle("Water Sources",     key="toggle_water")
-        st.toggle("Wetlands",          key="toggle_wetlands")
-        st.toggle("Drinking Fountains",key="toggle_fountains")
+        st.toggle("Water Sources",     key="toggle_water", help="Lakes, rivers, and other water bodies.")
+        st.toggle("Wetlands",          key="toggle_wetlands", help="Marshy land areas.")
+        st.toggle("Drinking Fountains",key="toggle_fountains", help="Public drinking water access points.")
     with n3:
-        st.toggle("Public Parks",      key="toggle_parks")
-        st.toggle("Green Roofs",       key="toggle_green_roofs")
-        st.toggle("Cooling Centers",   key="toggle_shelters")
+        st.toggle("Public Parks",      key="toggle_parks", help="Recreational green spaces.")
+        st.toggle("Green Roofs",       key="toggle_green_roofs", help="Vegetated roof systems.")
+        st.toggle("Cooling Centers",   key="toggle_shelters", help="Designated facilities for heat relief.")
 
     with map_placeholder:
         map_config = MapConfig(
