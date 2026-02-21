@@ -16,8 +16,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Initialize light_mode early for styles
+if "light_mode" not in st.session_state:
+    st.session_state.light_mode = False
+
 # 2. Load Styles
-load_css()
+load_css(st.session_state.light_mode)
 
 # City Data (Bio-Regions)
 CITIES = {
@@ -384,6 +388,7 @@ with col_map:
             center_lat=CITIES[st.session_state.selected_city_name]["lat"],
             center_lon=CITIES[st.session_state.selected_city_name]["lon"],
             simulations=st.session_state.simulations,
+            light_mode=st.session_state.light_mode,
         )
         deck_map = create_map(map_config)
         selection = st.pydeck_chart(deck_map, on_select="rerun", selection_mode="single-object", key="main_map_v2")

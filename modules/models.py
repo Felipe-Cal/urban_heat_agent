@@ -91,3 +91,4 @@ class MapConfig:
     center_lat: float = 34.0522
     center_lon: float = -118.2437
     simulations: list = field(default_factory=list)
+    light_mode: bool = False

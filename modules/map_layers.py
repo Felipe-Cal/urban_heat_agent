@@ -217,11 +217,19 @@ def create_map(config: MapConfig) -> pdk.Deck:
         bearing=0,
     )
 
+    # Dynamic tooltip styling based on theme
+    if config.light_mode:
+        tooltip_bg = "rgba(255, 255, 255, 0.95)"
+        tooltip_color = "#1e293b"
+    else:
+        tooltip_bg = "rgba(15, 23, 42, 0.95)"
+        tooltip_color = "#e2e8f0"
+
     tooltip = {
         "html": "{tooltip}",
         "style": {
-            "backgroundColor": "rgba(15, 23, 42, 0.95)",
-            "color": "#e2e8f0",
+            "backgroundColor": tooltip_bg,
+            "color": tooltip_color,
             "fontSize": "13px",
             "fontFamily": "Inter, sans-serif",
             "borderRadius": "6px",
@@ -236,9 +244,15 @@ def create_map(config: MapConfig) -> pdk.Deck:
         mapbox_api_key = st.secrets["mapbox"].get("access_token")
 
     if not mapbox_api_key:
-        map_style = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        if config.light_mode:
+            map_style = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        else:
+            map_style = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
     else:
-        map_style = "mapbox://styles/mapbox/light-v10"
+        if config.light_mode:
+            map_style = "mapbox://styles/mapbox/light-v10"
+        else:
+            map_style = "mapbox://styles/mapbox/dark-v10"
 
     return pdk.Deck(
         layers=layers,
