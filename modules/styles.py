@@ -94,11 +94,19 @@ def load_css(light_mode: bool = False):
         /* Outer container (st.container(border=True))
            The Streamlit Emotion CSS sets border via a generated class.
            We use box-shadow:inset which cannot be blocked by other CSS,
-           PLUS the regular border as backup. */
-        div[data-testid="stVerticalBlockBorderWrapper"] {{
+           PLUS the regular border as backup. We target the inner container
+           and the block container for maximum coverage. */
+        div[data-testid="stVerticalBlockBorderWrapper"],
+        div[data-testid="stVerticalBlockBorderWrapper"] > div:first-child,
+        .stVerticalBlockBorderWrapper,
+        div:has(> [data-testid="stVerticalBlockBorderWrapper"]) {{
             background-color: {bg2} !important;
             border: 2px solid {border} !important;
-            box-shadow: inset 0 0 0 2px {border} !important;
+            box-shadow: inset 0 0 0 2px {border}, 0 1px 3px rgba(0,0,0,0.1) !important;
+            border-radius: 8px !important;
+        }}
+        /* Ensure the suggested next steps (metrics blocks) also inherit this */
+        [data-testid="column"] > div > div > div > div > div:has(div[data-testid="stMetricValue"]) {{
             border-radius: 8px !important;
         }}
         div[data-testid="stExpander"],

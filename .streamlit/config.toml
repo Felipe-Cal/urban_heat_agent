@@ -4,3 +4,5 @@ backgroundColor = "#0f172a"
 secondaryBackgroundColor = "#1e293b"
 textColor = "#f8fafc"
 font = "sans serif"
+# Streamlit doesn't have an explicit 'borderColor' key in config.toml, 
+# but setting secondaryBackgroundColor often helps with container backgrounds.
