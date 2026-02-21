@@ -523,10 +523,18 @@ with col_map:
 
     with ctrl2:
         bonus_score = int(len(st.session_state.simulations) * 1.5)
-        st.metric(
-            "Resilience Score",
-            f"{city_data.resilience_score + bonus_score}/100",
-            f"+{bonus_score} pts" if bonus_score > 0 else "",
+        resilience_val = city_data.resilience_score + bonus_score
+        res_status_color = "#10b981" if bonus_score > 0 else "#3b82f6"
+        res_status_label = f"+{bonus_score} pts (Simulated)" if bonus_score > 0 else "Live"
+        st.markdown(
+            f"**Resilience Score**<br>"
+            f"<span style='font-size:1.8em; font-weight:600;'>{resilience_val}/100</span><br>"
+            f"<div style='display: flex; align-items: center; gap: 6px; margin-top: 4px;'>"
+            f"<div style='height:8px; width:8px; border-radius:50%; background-color:{res_status_color}; "
+            f"box-shadow: 0 0 6px {res_status_color}80;'></div>"
+            f"<span style='color:{res_status_color}; font-weight:500;'>{res_status_label}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
         )
     with ctrl3:
         # Calculate simulation delta

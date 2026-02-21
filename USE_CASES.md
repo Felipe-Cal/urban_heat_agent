@@ -1,55 +1,59 @@
-# Gaia Heat Sync — Real Use Cases
+# Gaia Heat Sync — Use Case Showcase Guide
 
-This document tracks validated use cases for the platform. Each entry includes a description, what real data backs it, and a test protocol any user can follow to verify it works.
+> **Purpose:** This document lists every showcase-ready use case for the Urban Heat Sync Agent prototype, ordered by strategic value. Each entry explains what the feature demonstrates, how to test it live, what is still missing, and how hard the missing piece would be to build.
 
 ---
 
-## UC-01 · Cooling Asset Inventory for a Heat Officer
+## Summary Table
+
+| # | Use Case | Status | Impact | Effort to Complete |
+|---|----------|--------|--------|--------------------|
+| [UC-01](#uc-01--cooling-asset-inventory--nature-id-registry) | Cooling Asset Inventory / Nature ID Registry | ✅ Live | ⭐⭐⭐⭐⭐ | — |
+| [UC-02](#uc-02--real-thermal-surface-temperature-heatmap) | Real Thermal Surface Temperature Heatmap | ✅ Live | ⭐⭐⭐⭐⭐ | — |
+| [UC-03](#uc-03--temporal-heat-simulation-diurnal-cycle) | Temporal Heat Simulation (Diurnal Cycle) | ✅ Live | ⭐⭐⭐⭐ | — |
+| [UC-04](#uc-04--live-air-quality-sensor-network-openaq) | Live Air Quality Sensor Network (OpenAQ) | ✅ Live | ⭐⭐⭐⭐ | — |
+| [UC-05](#uc-05--climate-resilience-score) | Climate Resilience Score | ✅ Live | ⭐⭐⭐⭐ | — |
+| [UC-06](#uc-06--sandbox--intervention-simulator) | Sandbox — Intervention Simulator | ✅ Live | ⭐⭐⭐⭐⭐ | — |
+| [UC-07](#uc-07--green-ledger--verifiable-data-provenance-vdp) | Green Ledger / Verifiable Data Provenance | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
+| [UC-08](#uc-08--digital-twin-profile--nature-id-on-click) | Digital Twin Profile / Nature ID on-click | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
+| [UC-09](#uc-09--agentic-sense--plan--act--reflect-loop) | Agentic Sense → Plan → Act → Reflect Loop | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
+| [UC-10](#uc-10--multi-city-bio-region-comparison) | Multi-City / Bio-Region Comparison | ⚠️ Partial | ⭐⭐⭐⭐ | 🔧 Low |
+| [UC-11](#uc-11--ai-generated-briefing-report) | AI-Generated Briefing Report (PDF) | ✅ Live | ⭐⭐⭐⭐ | — |
+| [UC-12](#uc-12--data-desert-detection--iot-sensor-gap-mapping) | Data Desert Detection / IoT Sensor Gap Mapping | ⚠️ Partial | ⭐⭐⭐ | 🔧 Low |
+| [UC-13](#uc-13--parametric-finance--green-bond-verification) | Parametric Finance / Green Bond Verification | ❌ Simulated | ⭐⭐⭐⭐⭐ | 🏗️ High |
+| [UC-14](#uc-14--user-authentication--multi-stakeholder-access) | User Authentication / Multi-Stakeholder Access | ✅ Live | ⭐⭐⭐ | — |
+
+**Legend — Effort:** 🔧 Low (< 1 day) · 🔨 Medium (1–3 days) · 🏗️ High (> 3 days)
+
+---
+
+## UC-01 · Cooling Asset Inventory / Nature ID Registry
 
 **Status:** ✅ Live (as of 2026-02-20)
 
-### What it does
-A city heat officer or emergency planner opens the platform before or during a heatwave to see exactly what cooling infrastructure exists in a neighbourhood — every tree, park, drinking fountain, cooling shelter, green roof, community garden, and wetland within a 1.5 km radius of the city centre.
-
-All locations come from **OpenStreetMap**, a continuously updated open geodatabase. Where OSM data is well-maintained (e.g. Los Angeles, London, Singapore), the inventory is highly accurate and includes operational details.
+### What it demonstrates
+A city heat officer opens the platform and sees every cooling infrastructure asset in a neighbourhood — every street tree, park, drinking fountain, cooling shelter, green roof, community garden, urban forest, and wetland within a configurable radius. Every asset has a **Nature ID** (e.g. `TREE-12345678`), a decentralised digital identity derived from the OpenStreetMap element ID. This is the foundational primitive of the entire planetary intelligence vision.
 
 ### What makes it real
 | Data field | Source | Real? |
 |---|---|---|
 | Asset locations (lat/lon) | OpenStreetMap Overpass API | ✅ Real |
-| Asset names | OSM `name` tag | ✅ Real |
-| Opening hours | OSM `opening_hours` tag | ✅ Real |
-| Live open/closed status | Parsed from `opening_hours` vs. current time | ✅ Real |
-| Operator name | OSM `operator` tag | ✅ Real (where mapped) |
-| Capacity | OSM `capacity` tag | ✅ Real (where mapped) |
-| Air conditioning | OSM `air_conditioning` tag | ✅ Real (where mapped) |
-| Street address | OSM `addr:street` + `addr:housenumber` | ✅ Real (where mapped) |
-| Wheelchair access | OSM `wheelchair` tag | ✅ Real (where mapped) |
-| Contact phone | OSM `phone` / `contact:phone` | ✅ Real (where mapped) |
+| Asset names, species, type | OSM `name`, `species`, `genus` tags | ✅ Real |
+| Opening hours / live open-closed status | OSM `opening_hours` tag | ✅ Real |
+| Operator, capacity, A/C, wheelchair, phone | OSM rich tags | ✅ Real (where mapped) |
 
-### Limitations
-- OSM tag coverage varies by city. LA and Singapore are well-mapped; Cairo and Mumbai have sparser operational data.
-- The **cooling impact °C** shown in tooltips is a modelled estimate (not a measured sensor reading).
-- Opening hours are parsed from the OSM string format — complex schedules (e.g. seasonal variations) may show "Check Hours" instead of a live status.
+### What is missing
+- Nature IDs are session-only — they are not persisted to the `nature_assets` SQLite table (code exists in `database.py` but the `upsert_nature_asset()` call is never made from the data pipeline).
+- No cross-session deduplication: re-loading the same city generates fresh random IDs each time.
 
 ### How to test
+1. Open the app → select **London, UK** or **Singapore** (best OSM coverage)
+2. Enable: `Tree Canopy`, `Cooling Centers`, `Drinking Fountains`, `Public Parks`
+3. Click any **amber dot** (Cooling Center) → verify the tooltip shows Open/Closed status, address, operator, and `SHELTER-<id>`
+4. Click any **green dot** (Tree) → verify tooltip shows species name and `TREE-<id>`
+5. Compare two city views — notice how park density changes resilience score (UC-05)
 
-1. Open the app at the Streamlit Cloud URL (or `localhost:8501`)
-2. Select a city from the dropdown — try **London, UK** or **Singapore** for best OSM coverage
-3. In the **NATURE ID ASSETS** section (right panel), activate:
-   - `🌳 Tree Canopy`
-   - `🏛️ Cooling Centers`
-   - `💧 Drinking Fountains`
-   - `🌳 Public Parks`
-4. Click on any amber dot (Cooling Center) on the map
-5. Verify the tooltip shows:
-   - A 🟢 **Open Now** / 🔴 **Closed** badge based on real opening hours
-   - At minimum: Name, Asset ID, Type
-   - Where OSM data is available: Address, Operator, Capacity, AC status, Wheelchair access
-6. Click on a blue dot (Drinking Fountain)
-7. Verify the tooltip shows whether access is free, wheelchair-accessible, and whether it is seasonal
-
-**Expected result:** Each clicked asset shows a structured tooltip with real operational data sourced directly from OpenStreetMap, not generated content.
+**Expected result:** Each asset has a structured ID, real operational data, and a "Cooling asset" tag — the raw material for a Nature ID registry.
 
 ---
 
@@ -57,32 +61,373 @@ All locations come from **OpenStreetMap**, a continuously updated open geodataba
 
 **Status:** ✅ Live (as of 2026-02-20)
 
-### What it does
-A city stakeholder explores the temperature distribution across a neighbourhood to identify Urban Heat Islands (UHIs) and correlate them with the lack of green infrastructure or presence of heavy built environment. The thermal layer displays an interpolated heatmap of real surface temperatures.
+### What it demonstrates
+Stakeholders visualise the Urban Heat Island (UHI) distribution across a city. The heatmap is not synthetic — it fetches a 10×10 grid of real surface/soil temperatures from the Open-Meteo API, then interpolates 2,000 scatter points using Inverse Distance Weighting (IDW) for a smooth, organic look. This proves that remote-sensing paradigms can work from open APIs without proprietary satellite access.
 
 ### What makes it real
 | Data field | Source | Real? |
 |---|---|---|
-| Land Surface Temperature (LST) | Open-Meteo `soil_temperature_0cm` API | ✅ Real |
-| Spatial Sampling | ~3 km grid around city centre | ✅ Real |
+| Land Surface Temperature (LST) | Open-Meteo `soil_temperature_0cm` (batch API) | ✅ Real |
+| Spatial grid (~3 km radius, 10×10 points) | Open-Meteo forecast API, multi-point format | ✅ Real |
+| Diurnal modulation | Cosine offset calibrated to local time slider | ✅ Modelled |
 
-*Note: The platform previously used synthetic Gaussian blobs centred on the city, but now fetches real model-derived skin/surface temperature data matching remote sensing paradigms like MODIS L1B/L2.*
-
-### Limitations
-- The Open-Meteo spatial resolution is typically between 1 km and 11 km depending on the underlying weather model (e.g., HRRR, ICON D2), meaning micro-urban variations (e.g., one street vs the next) might be smoothed out compared to direct satellite imagery.
-- During high API load or network timeouts, the layer falls back to a sparse synthetic grid to ensure continuous visual presence.
+### What is missing
+- Resolution is 1–11 km per model pixel — cannot resolve street-level variation.
+- No true satellite IR (Landsat/Sentinel) integration. That would provide 30 m resolution but requires authenticated access (NASA EarthData, Copernicus).
 
 ### How to test
+1. Select **Los Angeles, CA** or **Singapore**
+2. Enable `Thermal Heatmap` layer (Satellite Indices panel)
+3. Verify an irregular, asymmetric heat distribution (not a perfect circle)
+4. Open browser DevTools → Network → filter `open-meteo.com` → confirm the batch request with 100 comma-separated lat/lon pairs
 
-1. Open the app at the Streamlit Cloud URL (or `localhost:8501`)
-2. Select an urban focus area (like **Los Angeles, CA** or **Singapore**)
-3. In the **SATELLITE INDICES** section (left panel), activate:
-   - `🌡️ Thermal Heatmap`
-4. Verify the heatmap is displayed. It should follow an irregular, natural spatial pattern (hot spots and cool spots corresponding to local weather models), not a perfectly symmetric circle.
-5. In your browser's Developer Tools (Network tab), filter requests by `open-meteo.com` and reload the page. Verify a batch request containing `current=soil_temperature_0cm` and a long string of comma-separated latitudes/longitudes is made.
-
-**Expected result:** The map displays a realistic thermal overlay sourced via a batch API call, rather than a uniformly decaying synthetic circle.
+**Expected result:** Realistic thermal overlay with irregular hot/cool patches; DevTools confirms a real API call.
 
 ---
 
-*Add new use cases below as they are validated.*
+## UC-03 · Temporal Heat Simulation (Diurnal Cycle)
+
+**Status:** ✅ Live
+
+### What it demonstrates
+Users can drag a time slider to simulate heat intensity at any hour of the day. The system uses a calibrated cosine diurnal model (peak ~14:00, trough ~04:00) to shift the thermal heatmap and `Avg Surface Temp` metric in real time. A blue **NOW** marker on the slider shows the city's actual local time.
+
+### What makes it real
+- City UTC offsets are hardcoded per-city.
+- The displayed temperature is derived from the Open-Meteo live reading, modulated by the diurnal model.
+- The slider auto-initialises to the city's current local time on city change.
+
+### What is missing
+- The diurnal model uses a simplified cosine; it does not account for cloud cover, humidity, or seasonal variation.
+- Thermal grid data is fetched once and shared across all slider positions (day simulation is only an approximation, not a re-fetch at each hour).
+
+### How to test
+1. Select any city — note the `Avg Surface Temp` reading and the NOW marker position
+2. Drag the slider to **14:00** — verify `Avg Surface Temp` increases vs. 04:00
+3. Drag slider to **04:00** — verify temperature drop
+4. Switch cities — verify the slider resets to the new city's local time, and NOW marker repositions
+
+**Expected result:** Temperature delta updates live; NOW marker accurate to within 15 min; city switch resets slider.
+
+---
+
+## UC-04 · Live Air Quality Sensor Network (OpenAQ)
+
+**Status:** ✅ Live (requires `OPENAQ_API_KEY` in `secrets.toml` for full data)
+
+### What it demonstrates
+Real air quality monitoring stations from the **OpenAQ v3** network are plotted on the map as coloured dots (🟢 Good / 🟡 Moderate / 🔴 Unhealthy). With an API key, each station fetches real PM2.5/Ozone/NO2/PM10 readings and converts them to US AQI using EPA breakpoints. This layer demonstrates **real-time IoT sensor ingestion** — one of the core Sense components.
+
+### What makes it real
+| Data | Source | Real? |
+|---|---|---|
+| Station locations | OpenAQ v3 `/locations` geo-radius query | ✅ Real |
+| Active station filter | `datetimeLast` within 60 days | ✅ Real |
+| Pollutant readings | OpenAQ `/locations/{id}/latest` | ✅ Real (with API key) |
+| US AQI calculation | EPA standard breakpoints | ✅ Real |
+
+### What is missing
+- Without an API key, AQI values fall back to Open-Meteo's regional estimate (less granular).
+- No historical trend chart — only point-in-time readings.
+- No correlation display between AQI hot spots and heat islands on the same view.
+
+### How to test
+1. Add `OPENAQ_API_KEY = "your-key"` to `.streamlit/secrets.toml`
+2. Select **Los Angeles, CA** or **London, UK**
+3. Enable **Air Quality** layer
+4. Click on a coloured sensor dot → verify tooltip shows a real `OAQ-<id>`, pollutant type (PM2.5/O3), and AQI value
+5. Without API key: verify dots still appear but AQI shows a uniform regional estimate
+
+**Expected result:** Coloured sensor network visible; with API key each dot has a distinct, real AQI reading.
+
+---
+
+## UC-05 · Climate Resilience Score
+
+**Status:** ✅ Live
+
+### What it demonstrates
+A composite **Resilience Score (0–100)** is calculated from the real count of green assets fetched from OSM. More trees, parks, forests, water bodies, wetlands, shelters, and fountains → higher score. In Sandbox mode, simulated interventions add bonus points in real time, making the ROI of nature-based solutions immediately legible.
+
+### What makes it real
+The formula weights assets by ecological value:
+- Trees: up to 25 pts (0.1 pts each, capped)
+- Parks: up to 15 pts; Forests: up to 15 pts
+- Water: up to 10 pts; Gardens: up to 10 pts; Shelters: up to 10 pts
+- Wetlands: 5 pts; Green Roofs: 5 pts; Fountains: 5 pts
+
+All counts come from real OSM data — Singapore scores higher than Cairo because OSM data reflects actual greenery differences.
+
+### What is missing
+- No breakdown chart showing contribution per asset class.
+- The formula is heuristic — a real resilience index would factor in density (assets per km²), population vulnerability, and heat exposure overlap.
+- No historical tracking (score today vs. 1 year ago).
+
+### How to test
+1. Select **Singapore** — note resilience score
+2. Select **Cairo, Egypt** — compare score (should be significantly lower)
+3. Enter Sandbox mode → simulate interventions on concrete masses → watch score increase
+4. Exit Sandbox → verify score returns to baseline
+
+**Expected result:** Score varies meaningfully by city and increases when sandbox interventions are applied.
+
+---
+
+## UC-06 · Sandbox — Intervention Simulator
+
+**Status:** ✅ Live
+
+### What it demonstrates
+The **Sandbox** is the system's "Act" layer. Users click any mapped asset (building, road, park) and the AI proposes a context-aware cooling intervention:
+- **Concrete Mass** → 500 m² Intensive Green Roof (−0.4°C, $150k)
+- **Road/Transit Artery** → Bioswale & Canopy Corridor (−0.7°C, $300k)
+- **Other** → Albedo Enhancement (−0.2°C, $50k)
+
+Each intervention: decrements the $5M sandbox budget, adds a coloured overlay circle on the map, mints a Nature ID hash, and appends a row to the Green Ledger. The `Avg Surface Temp` metric and Resilience Score update live.
+
+### What is missing
+- Intervention ROI figures (energy savings, ER visits avoided) are hardcoded, not computed from real local data.
+- No "undo last intervention" — only "Clear All."
+- No spatial constraint: you can place interventions on top of each other or on water.
+- Budget depletion does not prevent further interventions (no guard).
+
+### How to test
+1. Click **Launch Sandbox**
+2. Enable **Buildings** layer → click a building on the map
+3. Verify: chat shows ANALYZE / PROPOSE / ROI block; map shows a coloured radius circle; budget decreases; `Avg Surface Temp` drops
+4. Enable **Traffic** layer → click a highway → verify Bioswale intervention proposed
+5. Open **Green Ledger** → verify the intervention row was appended with a Nature ID hash
+6. Click **Clear Interventions** → verify map resets and budget restores to $5M
+
+**Expected result:** Each click produces a differentiated, contextual intervention proposal and updates all dashboard metrics simultaneously.
+
+---
+
+## UC-07 · Green Ledger / Verifiable Data Provenance (VDP)
+
+**Status:** ⚠️ Partially implemented
+
+### What it demonstrates
+The **Green Ledger** is the trust layer of the system. It records every simulated cooling intervention with a timestamp, Nature ID hash, target asset, intervention type, and cooling impact — simulating a cryptographically signed audit trail. This is the prototype of the "blockchain anchor" described in the architecture.
+
+### What makes it real
+- The ledger table schema exists in SQLite (`database.py`) with `save_ledger_entry()` / `load_ledger_entries()` fully implemented.
+- The Sandbox mints new Nature ID hashes and appends rows to `st.session_state.green_ledger` (visible in the UI table).
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Session persistence | Ledger lives in `session_state` only — cleared on page refresh. `database.py` functions exist but are never called. | 🔧 Low (wire up `save_ledger_entry()` in `agent_logic.py`) |
+| Real cryptographic hash | Nature ID is a random hex string, not a deterministic hash of sensor data + timestamp. | 🔨 Medium (SHA-256 over asset payload) |
+| Blockchain anchor | Currently just a simulated button — no actual on-chain write (Ethereum/Polygon/Ceramic). | 🏗️ High |
+| Auditor Agent | No automatic comparison of claimed cooling vs. measured temperature delta. | 🏗️ High |
+
+### How to test
+1. Enter **Sandbox** → add 2–3 interventions
+2. Open **Green Ledger** expander → verify table shows Nature IDs, cooling claims, timestamps
+3. Click **⚙️ Simulate Legacy Verification** → verify simulated blockchain hash in chat
+4. Refresh the page → notice ledger is lost (demonstrates the missing persistence gap)
+
+**Expected result (current):** Ledger populates during session. **Expected result (after fix):** Ledger survives page refresh because rows are written to SQLite.
+
+---
+
+## UC-08 · Digital Twin Profile / Nature ID on-click
+
+**Status:** ⚠️ Partially implemented
+
+### What it demonstrates
+Clicking any nature asset outside Sandbox mode triggers a **Digital Twin Profile** card in the chat — showing the Nature ID hash, estimated age, carbon sequestration, local cooling power, and verification status. This demonstrates the concept of every urban biological asset having a persistent, queryable digital identity.
+
+### What makes it real
+- Asset ID comes from the real OSM element ID (e.g., `TREE-123456789`).
+- Asset type, name, and coordinates are real OSM data.
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Age, carbon, cooling are synthesised | Values are `random.randint` — not derived from species databases (e.g., i-Tree, TreesDB) or satellite growth analysis. | 🏗️ High |
+| Nature ID not persisted | Hash is re-generated per session; clicking the same tree tomorrow gives a different ID. | 🔧 Low (wire `upsert_nature_asset()`) |
+| Map click → chat bridging is broken | `st.pydeck_chart` `on_select` fires but the `selection` object handling after line 692 of `app.py` is a stub — map clicks do not trigger the twin profile in the current version. | 🔨 Medium |
+
+### How to test
+1. Ensure **Tree Canopy** or **Buildings** layer is enabled (Sandbox OFF)
+2. Click a dot on the map
+3. Check chat panel — verify a Digital Twin card appears with: Asset Type, Nature ID Hash, Est. Age, Carbon Seq, Local Cooling, Status
+4. *(Known issue: map click integration may not fire reliably — test by using the Sandbox flow as a proxy)*
+
+**Expected result:** A structured card loads in chat for every clicked asset, demonstrating the Nature ID query.
+
+---
+
+## UC-09 · Agentic Sense → Plan → Act → Reflect Loop
+
+**Status:** ⚠️ Partially implemented (3 of 4 phases live)
+
+### What it demonstrates
+The core Planetary Intelligence loop: the system **Senses** environmental data, **Plans** interventions, **Acts** via the sandbox, and ideally **Reflects** by comparing outcomes. Three pre-built scenarios plus a free-text GPT-4o-mini interface demonstrate agentic reasoning.
+
+### Phases currently live
+| Phase | Feature | Implementation |
+|-------|---------|----------------|
+| **SENSE** | Auto-Analyze Region | Scans for thermal anomalies, correlates heat islands with canopy gaps |
+| **SENSE** | Scan for Data Deserts | Identifies areas with no sensor coverage |
+| **PLAN** | Detect Thermal Risk Areas | Proposes multi-species tree planting + albedo coating |
+| **ACT** | Sandbox Intervention | Executes proposed intervention on a specific asset |
+| **REFLECT** | ❌ Auditor Agent | Not implemented — no automated comparison of pre/post temperatures |
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Reflect / Auditor loop | After simulating an intervention, there is no code path that re-queries the Open-Meteo API, compares the delta delta, and issues a VDP-signed verdict. | 🏗️ High |
+| Layer activation from Agent | Agent can emit `[ACTION: ACTIVATE_THERMAL]` tokens; parser exists in `process_custom_query()`. However the parser only fires on streamed LLM responses — pre-built scenario buttons bypass it. | 🔧 Low (add `st.session_state.toggle_thermal = True` after each button scenario) |
+| Persistent memory | Each session starts fresh — the agent has no memory of past interventions or city baselines. | 🏗️ High (vector store or Supabase memory table) |
+
+### How to test
+1. Click **Auto-Analyze Region** → verify chat shows SENSE / REASON / PLAN block with 3 localised interventions
+2. Click **Scan for Data Deserts** → verify PLAN shows IoT node placement + VDP-Signed note
+3. Click **Detect Thermal Risk Areas** → verify PLAN shows tree species + ROI estimate
+4. Type in the chat: *"Activate the thermal layer and tell me where the hottest zone is"* → verify the thermal layer toggles ON automatically (if OpenAI key configured)
+
+**Expected result:** All 3 buttons produce distinct, structured reasoning chains; free-text query activates layers via action tokens.
+
+---
+
+## UC-10 · Multi-City / Bio-Region Comparison
+
+**Status:** ⚠️ Partial (sequential, not simultaneous)
+
+### What it demonstrates
+The system supports 13 cities across 4 continents, each with calibrated OSM radii and UTC offsets. Switching cities reloads all real data — demonstrating global scalability of the spine.
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Side-by-side city comparison | Currently only one city view at a time — no split screen or overlay comparison mode. | 🔨 Medium |
+| City-scoped Green Ledger | Ledger entries don't currently record which city they belong to (the `city` column exists in `database.py` but is not passed from the sandbox flow). | 🔧 Low |
+| Cities in the Global South | Only 2 of 13 cities are in Africa/MENA (Cairo) + Southern Asia (Mumbai). Adding Freetown, Nairobi, Dhaka would align with the stated mission of serving "data deserts." | 🔧 Low |
+
+### How to test
+1. Select **Singapore** → note resilience score and visible asset count
+2. Select **Cairo, Egypt** → compare (lower tree count, lower resilience score)
+3. Select **Tokyo, Japan** → compare density and building layer detail
+4. Slide temporal slider for each → verify NOW marker shifts per city timezone
+
+**Expected result:** Each city loads distinct real data; resilience score varies with actual green infrastructure; timezone is accurate per city.
+
+---
+
+## UC-11 · AI-Generated Briefing Report (PDF)
+
+**Status:** ✅ Live (requires `OPENAI_API_KEY`)
+
+### What it demonstrates
+With one click, the system generates a **formal bio-regional resilience briefing** using GPT-4o-mini, injecting the current screen context (city, temperature, resilience score, active layers) as the system prompt. The report is rendered to PDF via `markdown-pdf` and offered as a download. This demonstrates the system's ability to produce **decision-ready outputs** for municipal stakeholders.
+
+### What is missing
+- Without an OpenAI key, the button does nothing (should at least produce a static template).
+- The report does not include map screenshots or the Green Ledger table.
+- No custom sections — a heat officer cannot request specific sections (e.g., budget breakdown, neighbourhood-specific analysis).
+
+### How to test
+1. Configure `OPENAI_API_KEY` in `.streamlit/secrets.toml`
+2. Select **New York City, USA**, enable Thermal + Trees layers
+3. Click **📄 Generate Briefing Report**
+4. Wait for spinner → click **Download PDF Briefing**
+5. Verify PDF contains: city name, temperature reading, resilience score, layer context, recommendations
+
+**Expected result:** A multi-section Markdown-rendered PDF with the city's live dashboard context embedded.
+
+---
+
+## UC-12 · Data Desert Detection / IoT Sensor Gap Mapping
+
+**Status:** ⚠️ Partial (simulated narrative, partial real data)
+
+### What it demonstrates
+The system identifies areas where sensor coverage is absent — "data deserts" — which is the first step in deploying a decentralised IoT mesh. The **Scan for Data Deserts** button triggers a narrative showing 8 optimal proposed IoT node locations. The real OpenAQ layer already shows where coverage exists, implicitly revealing where it doesn't.
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Spatial gap algorithm | No code computes actual sensor density vs. population/heat exposure to identify true deserts. | 🔨 Medium (Voronoi gap analysis on OpenAQ stations) |
+| Proposed node visualisation | The "8 optimal locations" are mentioned in chat text only — not rendered on the map. | 🔨 Medium |
+| Ground sensor data | All sensor data comes from stationary reference stations, not low-cost IoT devices. | 🏗️ High (requires hardware integration) |
+
+### How to test
+1. Enable **Air Quality** layer for **Cairo, Egypt** or **Mexico City, Mexico**
+2. Observe sparse sensor coverage compared to **London** or **Los Angeles**
+3. Click **Scan for Data Deserts** → verify agent describes IoT node deployment plan in the chat
+
+**Expected result:** Sensor gap is visually obvious from the Air Quality layer; agent narrates a deployment strategy.
+
+---
+
+## UC-13 · Parametric Finance / Green Bond Verification
+
+**Status:** ❌ Simulated only
+
+### What it demonstrates
+The **⚙️ Simulate Legacy Verification** button in the Green Ledger panel shows the concept: after an intervention claim is made, an Auditor Agent compares the claim against signed sensor data and seals the result to a blockchain with an immutable hash. This would be the mechanism for triggering automated green bond payouts when verified cooling milestones are met.
+
+### What is missing
+| Gap | Details | Effort |
+|-----|---------|--------|
+| Real pre/post temperature comparison | No code fetches temperature before and after a simulated intervention to compute a real delta. | 🔨 Medium |
+| Cryptographic hash of real data | Hash is `random.randint` — not derived from actual readings. | 🔨 Medium (SHA-256 over payload) |
+| Smart contract / parametric trigger | No integration with any blockchain or insurance protocol. | 🏗️ High |
+| Finance module UI | No dedicated screen for funders to view verified impact claims. | 🏗️ High |
+
+### How to test
+1. Enter Sandbox → add interventions → open **Green Ledger**
+2. Click **⚙️ Simulate Legacy Verification**
+3. Verify chat shows: `[REFLECT]` comparison, `[VERIFY]` impact statement, `[BLOCKCHAIN]` fake hash
+4. Discuss with stakeholders: "This is what a real VDP-signed payout trigger would look like — the hash would be written on-chain."
+
+**Expected result:** The scenario is clearly labelled as a simulation; the narrative flow demonstrates the full provenance chain for an investor audience.
+
+---
+
+## UC-14 · User Authentication / Multi-Stakeholder Access
+
+**Status:** ✅ Live
+
+### What it demonstrates
+The system uses **Supabase** for email/password and Google OAuth authentication — gating the entire dashboard behind a login wall. This demonstrates the multi-stakeholder access model: different users (Heat Officers, Utility Providers, Climate Funders) would eventually see role-specific dashboards.
+
+### What is missing
+- All authenticated users see the same dashboard — there are no roles or permission levels.
+- Session persistence via cookies (`extra-streamlit-components`) is unreliable in the current implementation.
+- No profile page or user-specific saved state (favourite cities, custom ledger views).
+
+### How to test
+1. Open app at `localhost:8501` (unauthenticated)
+2. Verify the login/signup screen blocks dashboard access
+3. Sign up with a test email → verify auto-login after registration
+4. Log out → verify session is cleared and dashboard is inaccessible
+5. Log back in → verify dashboard loads with previous city data
+
+**Expected result:** Login gates the dashboard; sign-up creates an account and auto-logs in; logout clears session.
+
+---
+
+## Showcase Order Recommendation
+
+For a live demo to investors or city partners, run the use cases in this order:
+
+```
+1. UC-14 → Log in (establish trust & access control)
+2. UC-01 → Show Nature ID assets for Singapore or London (anchor in real data)
+3. UC-02 → Enable Thermal Heatmap (visual wow moment)
+4. UC-03 → Drag time slider to 14:00 → 04:00 (demonstrate diurnal intelligence)
+5. UC-04 → Show Air Quality sensor network (multi-sensor IoT)
+6. UC-05 → Highlight Resilience Score and how it is calculated
+7. UC-09 → Click "Auto-Analyze Region" (agentic reasoning demo)
+8. UC-06 → Launch Sandbox → click a building → show intervention + ROI
+9. UC-07 → Open Green Ledger → show minted Nature IDs → "Simulate Legacy Verification"
+10. UC-11 → Generate PDF Briefing → download (leave stakeholder with a report)
+```
+
+---
+
+*Last updated: 2026-02-21 · Add new validated use cases as they are built.*
