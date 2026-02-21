@@ -119,6 +119,7 @@ _state_defaults = {
     "light_mode":         False,
     "need_initial_analysis": True,
     "last_fetched_city":  None,
+    "map_annotations":    [],
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -295,6 +296,8 @@ def fetch_data_with_loading(lat, lon, time_of_day, city_name, action_desc, radiu
 
 # Load data on first run or if city changed
 if "data" not in st.session_state or st.session_state.get("last_fetched_city") != st.session_state.selected_city_name:
+    if st.session_state.selected_city_name not in CITIES:
+        st.session_state.selected_city_name = "New York City, USA"
     city = CITIES[st.session_state.selected_city_name]
     st.session_state.data = fetch_data_with_loading(
         city["lat"], city["lon"],
@@ -754,6 +757,7 @@ with col_map:
             center_lat=CITIES[st.session_state.selected_city_name]["lat"],
             center_lon=CITIES[st.session_state.selected_city_name]["lon"],
             simulations=st.session_state.simulations,
+            annotations=st.session_state.map_annotations,
         )
         deck_map = create_map(map_config)
         selection = st.pydeck_chart(

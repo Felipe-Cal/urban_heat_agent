@@ -123,9 +123,21 @@ class AgentSimulator:
     # ------------------------------------------------------------------
 
     def simulate_deployment(self) -> None:
-        """Scenario: Deploy Nervous System."""
-        self.add_message("user", "Scan for Data Desserts")
+        """Scenario: Deploy Nervous System (Data Deserts)."""
+        self.add_message("user", "Map Data Deserts")
         st.session_state.agent_status = "ACTIVE"
+        
+        # MOCK ANNOTATIONS: Create 5 mock data deserts spread around the city center
+        data = st.session_state.get("data")
+        lat = getattr(data, "center_lat", 34.05) if data else 34.05
+        lon = getattr(data, "center_lon", -118.24) if data else -118.24
+        
+        import random
+        st.session_state.map_annotations = [
+            {"lat": lat + random.uniform(-0.015, 0.015), "lon": lon + random.uniform(-0.015, 0.015), "radius": 150, "color": [59, 130, 246, 200]}
+            for _ in range(5)
+        ]
+
         response = (
             "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
             "**[SENSE]** Scanning for Data Deserts in Census Tract 242...<br>"
@@ -139,9 +151,21 @@ class AgentSimulator:
         st.session_state.agent_status = "IDLE"
 
     def simulate_intervention(self) -> None:
-        """Scenario: Win-Win Intervention."""
-        self.add_message("user", "Detect Thermal Risk Areas")
+        """Scenario: Win-Win Intervention (Thermal Risk)."""
+        self.add_message("user", "Map Thermal Risk Areas")
         st.session_state.agent_status = "REASONING"
+        
+        # MOCK ANNOTATIONS: Create 3 mock thermal risk areas (larger radius)
+        data = st.session_state.get("data")
+        lat = getattr(data, "center_lat", 34.05) if data else 34.05
+        lon = getattr(data, "center_lon", -118.24) if data else -118.24
+        
+        import random
+        st.session_state.map_annotations = [
+            {"lat": lat + random.uniform(-0.01, 0.01), "lon": lon + random.uniform(-0.01, 0.01), "radius": 250, "color": [239, 68, 68, 200]}
+            for _ in range(3)
+        ]
+
         response = (
             "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
             "**[SENSE]** Surface temp 49°C detected in proximity to schools.<br>"
@@ -156,6 +180,9 @@ class AgentSimulator:
 
     def auto_analyze_region(self, data: Optional["CityData"] = None) -> None:
         """Scan current region data and suggest top interventions."""
+        # Clear previous annotations on new regional analysis
+        st.session_state.map_annotations = []
+        
         # Use provided data or fallback to session state
         if data is None:
             data = st.session_state.get("data")
@@ -218,6 +245,9 @@ class AgentSimulator:
 
     def analyze_asset(self, obj: dict) -> None:
         """Contextual reasoning for a specific map asset clicked by the user."""
+        # Clear region-wide annotations to focus on the asset
+        st.session_state.map_annotations = []
+        
         asset_id = obj.get("asset_id", obj.get("id", "Unknown"))
         name = obj.get("name", "Urban Asset")
         asset_type = obj.get("type", "Infrastructure")
@@ -365,6 +395,9 @@ class AgentSimulator:
 
     def process_custom_query(self, query: str) -> None:
         """Handle arbitrary user input, streaming from OpenAI if available."""
+        # Clear previous annotations as the user is initiating a new conversation topic
+        st.session_state.map_annotations = []
+        
         self.add_message("user", query)
         st.session_state.agent_status = "REASONING"
 
@@ -402,8 +435,18 @@ class AgentSimulator:
                 # Parse and apply city switching actions
                 city_switches = re.findall(r"\[ACTION:\s*SWITCH_CITY_([^\]]+)\]", assistant_response)
                 for city_name in city_switches:
-                    # We assume the name is valid as per CITIES list provided in prompt
-                    st.session_state.selected_city_name = city_name
+                    target = city_name.strip().lower()
+                    valid_cities = [
+                        "Barcelona, Spain", "Cairo, Egypt", "London, UK", "Los Angeles, USA",
+                        "Madrid, Spain", "Mexico City, Mexico", "Mumbai, India", "New York City, USA",
+                        "San Francisco, USA", "São Paulo, Brazil", "Singapore", "Sydney, Australia", "Tokyo, Japan"
+                    ]
+                    best_match = city_name
+                    for valid in valid_cities:
+                        if target in valid.lower() or valid.lower() in target:
+                            best_match = valid
+                            break
+                    st.session_state.selected_city_name = best_match
                     st.session_state.need_initial_analysis = True
 
             except Exception as e:

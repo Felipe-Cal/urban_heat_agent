@@ -149,7 +149,27 @@ def create_map(config: MapConfig) -> pdk.Deck:
         ))
 
     # ------------------------------------------------------------------
+    # Agent Annotations overlay
+    # ------------------------------------------------------------------
+    if config.annotations:
+        layers.append(pdk.Layer(
+            "ScatterplotLayer", id="Annotations",
+            data=config.annotations,
+            get_position="[lon, lat]",
+            get_fill_color="color",
+            get_radius="radius",
+            stroked=True,
+            get_line_color="[255, 255, 255, 255]",
+            line_width_min_pixels=2,
+            pickable=True,
+            auto_highlight=True,
+            radius_min_pixels=20,
+            radius_max_pixels=60,
+        ))
+
+    # ------------------------------------------------------------------
     # View state + base map
+
     # ------------------------------------------------------------------
     view_state = pdk.ViewState(
         latitude=config.center_lat,

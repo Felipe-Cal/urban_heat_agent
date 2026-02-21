@@ -12,10 +12,10 @@
 | [UC-02](#uc-02--real-thermal-surface-temperature-heatmap) | Real Thermal Surface Temperature Heatmap | ✅ Live | ⭐⭐⭐⭐⭐ | — |
 | [UC-03](#uc-03--temporal-heat-simulation-diurnal-cycle) | Temporal Heat Simulation (Diurnal Cycle) | ✅ Live | ⭐⭐⭐⭐ | — |
 | [UC-04](#uc-04--live-air-quality-sensor-network-openaq) | Live Air Quality Sensor Network (OpenAQ) | ✅ Live | ⭐⭐⭐⭐ | — |
-| [UC-05](#uc-05--climate-resilience-score) | Climate Resilience Score | ✅ Live | ⭐⭐⭐⭐ | — |
+| [UC-05](#uc-05--dynamic-heat-risk-index) | Dynamic Heat Risk Index | ✅ Live | ⭐⭐⭐⭐ | — |
 | [UC-06](#uc-06--sandbox--intervention-simulator) | Sandbox — Intervention Simulator | ✅ Live | ⭐⭐⭐⭐⭐ | — |
 | [UC-07](#uc-07--green-ledger--verifiable-data-provenance-vdp) | Green Ledger / Verifiable Data Provenance | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
-| [UC-08](#uc-08--digital-twin-profile--nature-id-on-click) | Digital Twin Profile / Nature ID on-click | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
+| [UC-08](#uc-08--agentic-digital-twin-asset-profiling) | Agentic Digital Twin Asset Profiling | ✅ Live | ⭐⭐⭐⭐⭐ | — |
 | [UC-09](#uc-09--agentic-sense--plan--act--reflect-loop) | Agentic Sense → Plan → Act → Reflect Loop | ⚠️ Partial | ⭐⭐⭐⭐⭐ | 🔨 Medium |
 | [UC-10](#uc-10--multi-city-bio-region-comparison) | Multi-City / Bio-Region Comparison | ⚠️ Partial | ⭐⭐⭐⭐ | 🔧 Low |
 | [UC-11](#uc-11--ai-generated-briefing-report) | AI-Generated Briefing Report (PDF) | ✅ Live | ⭐⭐⭐⭐ | — |
@@ -96,6 +96,7 @@ Users can drag a time slider to simulate heat intensity at any hour of the day. 
 - City UTC offsets are hardcoded per-city.
 - The displayed temperature is derived from the Open-Meteo live reading, modulated by the diurnal model.
 - The slider auto-initialises to the city's current local time on city change.
+- Infrastructure and nature datasets are efficiently reused during temporal shifts, guaranteeing smooth 60fps simulation without hitting external APIs repeatedly.
 
 ### What is missing
 - The diurnal model uses a simplified cosine; it does not account for cloud cover, humidity, or seasonal variation.
@@ -142,34 +143,30 @@ Real air quality monitoring stations from the **OpenAQ v3** network are plotted 
 
 ---
 
-## UC-05 · Climate Resilience Score
+## UC-05 · Dynamic Heat Risk Index
 
 **Status:** ✅ Live
 
 ### What it demonstrates
-A composite **Resilience Score (0–100)** is calculated from the real count of green assets fetched from OSM. More trees, parks, forests, water bodies, wetlands, shelters, and fountains → higher score. In Sandbox mode, simulated interventions add bonus points in real time, making the ROI of nature-based solutions immediately legible.
+A composite **Heat Risk Index (0–100)** is calculated dynamically based on real-time environmental factors (local temperature and OpenAQ air quality), grounded in WHO and US NWS thresholds. It replaces arbitrary static scoring with a live, actionable gauge of immediate biological thermal stress.
 
 ### What makes it real
-The formula weights assets by ecological value:
-- Trees: up to 25 pts (0.1 pts each, capped)
-- Parks: up to 15 pts; Forests: up to 15 pts
-- Water: up to 10 pts; Gardens: up to 10 pts; Shelters: up to 10 pts
-- Wetlands: 5 pts; Green Roofs: 5 pts; Fountains: 5 pts
-
-All counts come from real OSM data — Singapore scores higher than Cairo because OSM data reflects actual greenery differences.
+The formula uses real-world thresholds:
+- **Thermal Factor (60%):** Curves upward sharply between 25°C and 40°C.
+- **Air Quality Factor (40%):** Maps EPA AQI bands (0-300+) to risk penalties.
+- **Diurnal Modifier:** Applies a 1.2x stress multiplier during peak afternoon hours (12:00–16:00).
+The result categorizes the city's status into 'Low', 'Moderate', 'High', or 'Extreme' risk.
 
 ### What is missing
-- No breakdown chart showing contribution per asset class.
-- The formula is heuristic — a real resilience index would factor in density (assets per km²), population vulnerability, and heat exposure overlap.
 - No historical tracking (score today vs. 1 year ago).
+- Does not currently factor in specific humidity/wet-bulb temperature, which is the gold standard for human thermal limit modeling.
 
 ### How to test
-1. Select **Singapore** — note resilience score
-2. Select **Cairo, Egypt** — compare score (should be significantly lower)
-3. Enter Sandbox mode → simulate interventions on concrete masses → watch score increase
-4. Exit Sandbox → verify score returns to baseline
+1. Select **Singapore** or **Cairo** — note the Heat Risk Index and its categorical label.
+2. Drag the temporal slider to peak afternoon (14:00) — observe the Heat Risk Index actively increasing due to diurnal multipliers.
+3. Enter Sandbox mode → simulate interventions on concrete masses → watch the Index dynamically adjust downward as simulated cooling is applied.
 
-**Expected result:** Score varies meaningfully by city and increases when sandbox interventions are applied.
+**Expected result:** The Risk Index responds fluidly to temporal changes, live data, and hypothetical sandbox interventions.
 
 ---
 
@@ -232,31 +229,30 @@ The **Green Ledger** is the trust layer of the system. It records every simulate
 
 ---
 
-## UC-08 · Digital Twin Profile / Nature ID on-click
+## UC-08 · Agentic Digital Twin Asset Profiling
 
-**Status:** ⚠️ Partially implemented
+**Status:** ✅ Live
 
 ### What it demonstrates
-Clicking any nature asset outside Sandbox mode triggers a **Digital Twin Profile** card in the chat — showing the Nature ID hash, estimated age, carbon sequestration, local cooling power, and verification status. This demonstrates the concept of every urban biological asset having a persistent, queryable digital identity.
+Clicking any nature or infrastructure asset triggers an immediate contextual analysis by the **Gaia Agent**. Rather than a static data card, the AI evaluates the asset's specific role in the local bio-region (e.g., identifying a tree as a terrestrial cooling anchor vs. a road as an urban heat island friction point) and suggests three precise follow-up actions to simulate.
 
 ### What makes it real
-- Asset ID comes from the real OSM element ID (e.g., `TREE-123456789`).
-- Asset type, name, and coordinates are real OSM data.
+- Asset identity, spatial geometry, and classification come directly from real OSM element tags.
+- The agent's reasoning is injected with the city's live thermal data and the specific category of the asset clicked (Hydrological, Terrestrial, Infrastructure).
 
 ### What is missing
 | Gap | Details | Effort |
 |-----|---------|--------|
-| Age, carbon, cooling are synthesised | Values are `random.randint` — not derived from species databases (e.g., i-Tree, TreesDB) or satellite growth analysis. | 🏗️ High |
-| Nature ID not persisted | Hash is re-generated per session; clicking the same tree tomorrow gives a different ID. | 🔧 Low (wire `upsert_nature_asset()`) |
-| Map click → chat bridging is broken | `st.pydeck_chart` `on_select` fires but the `selection` object handling after line 692 of `app.py` is a stub — map clicks do not trigger the twin profile in the current version. | 🔨 Medium |
+| Multi-asset selection | Currently only analyzes one asset at a time; cannot select an entire block or neighbourhood for aggregate profiling. | 🔨 Medium |
+| Algorithmic carbon estimates | Carbon sequestration figures in sandbox simulations are static heuristics, not calculated from actual species DBs like i-Tree. | 🏗️ High |
 
 ### How to test
-1. Ensure **Tree Canopy** or **Buildings** layer is enabled (Sandbox OFF)
-2. Click a dot on the map
-3. Check chat panel — verify a Digital Twin card appears with: Asset Type, Nature ID Hash, Est. Age, Carbon Seq, Local Cooling, Status
-4. *(Known issue: map click integration may not fire reliably — test by using the Sandbox flow as a proxy)*
+1. Ensure **Tree Canopy** or **Buildings** layer is enabled (Sandbox OFF).
+2. Click a specific building or tree on the map.
+3. Check the chat panel — verify the Gaia Agent immediately posts a contextual breakdown of that asset type along with 1-3 suggested next simulation steps.
+4. Click 'Launch Sandbox' and click the same asset to execute an intervention.
 
-**Expected result:** A structured card loads in chat for every clicked asset, demonstrating the Nature ID query.
+**Expected result:** Every map feature serves as a clickable prompt that anchors the AI's reasoning to a specific spatial coordinate.
 
 ---
 
@@ -265,31 +261,30 @@ Clicking any nature asset outside Sandbox mode triggers a **Digital Twin Profile
 **Status:** ⚠️ Partially implemented (3 of 4 phases live)
 
 ### What it demonstrates
-The core Planetary Intelligence loop: the system **Senses** environmental data, **Plans** interventions, **Acts** via the sandbox, and ideally **Reflects** by comparing outcomes. Three pre-built scenarios plus a free-text GPT-4o-mini interface demonstrate agentic reasoning.
+The core Planetary Intelligence loop: the system **Senses** environmental data, **Plans** interventions, **Acts** via the sandbox, and ideally **Reflects** by comparing outcomes. Three pre-built scenarios plus a free-text interface demonstrate agentic reasoning.
 
 ### Phases currently live
 | Phase | Feature | Implementation |
 |-------|---------|----------------|
-| **SENSE** | Auto-Analyze Region | Scans for thermal anomalies, correlates heat islands with canopy gaps |
-| **SENSE** | Scan for Data Deserts | Identifies areas with no sensor coverage |
-| **PLAN** | Detect Thermal Risk Areas | Proposes multi-species tree planting + albedo coating |
+| **SENSE** | Analyze City Heat Risk | Scans for thermal anomalies, correlates heat islands with canopy gaps |
+| **SENSE** | Map Data Deserts | Identifies areas with no sensor coverage |
+| **PLAN** | Map Thermal Risk | Proposes multi-species tree planting + albedo coating |
 | **ACT** | Sandbox Intervention | Executes proposed intervention on a specific asset |
 | **REFLECT** | ❌ Auditor Agent | Not implemented — no automated comparison of pre/post temperatures |
 
 ### What is missing
 | Gap | Details | Effort |
 |-----|---------|--------|
-| Reflect / Auditor loop | After simulating an intervention, there is no code path that re-queries the Open-Meteo API, compares the delta delta, and issues a VDP-signed verdict. | 🏗️ High |
-| Layer activation from Agent | Agent can emit `[ACTION: ACTIVATE_THERMAL]` tokens; parser exists in `process_custom_query()`. However the parser only fires on streamed LLM responses — pre-built scenario buttons bypass it. | 🔧 Low (add `st.session_state.toggle_thermal = True` after each button scenario) |
-| Persistent memory | Each session starts fresh — the agent has no memory of past interventions or city baselines. | 🏗️ High (vector store or Supabase memory table) |
+| Reflect / Auditor loop | After simulating an intervention, there is no code path that re-queries the Open-Meteo API, compares the delta, and issues a VDP-signed verdict. | 🏗️ High |
+| Persistent memory | Each session starts fresh — the agent has no memory of past interventions or city baselines. | 🏗️ High |
 
 ### How to test
-1. Click **Auto-Analyze Region** → verify chat shows SENSE / REASON / PLAN block with 3 localised interventions
-2. Click **Scan for Data Deserts** → verify PLAN shows IoT node placement + VDP-Signed note
-3. Click **Detect Thermal Risk Areas** → verify PLAN shows tree species + ROI estimate
-4. Type in the chat: *"Activate the thermal layer and tell me where the hottest zone is"* → verify the thermal layer toggles ON automatically (if OpenAI key configured)
+1. Select a city. The Agent will immediately perform an automatic **Node Briefing** characterizing the current bio-region.
+2. Click **Analyze City Heat Risk** → verify chat shows SENSE / REASON / PLAN block with localized context.
+3. Click **Map Data Deserts** → verify PLAN shows IoT node placement.
+4. Click into the chat input, type *"Activate the thermal layer"* → verify the layer toggles ON automatically.
 
-**Expected result:** All 3 buttons produce distinct, structured reasoning chains; free-text query activates layers via action tokens.
+**Expected result:** Quick actions produce distinct, structured reasoning chains; map clicks bridge spatial data to AI reasoning.
 
 ---
 
@@ -415,19 +410,20 @@ The system uses **Supabase** for email/password and Google OAuth authentication 
 
 For a live demo to investors or city partners, run the use cases in this order:
 
-```
+```text
 1. UC-14 → Log in (establish trust & access control)
 2. UC-01 → Show Nature ID assets for Singapore or London (anchor in real data)
 3. UC-02 → Enable Thermal Heatmap (visual wow moment)
-4. UC-03 → Drag time slider to 14:00 → 04:00 (demonstrate diurnal intelligence)
+4. UC-03 → Drag time slider to 14:00 → 04:00 (demonstrate smooth diurnal intelligence data reuse)
 5. UC-04 → Show Air Quality sensor network (multi-sensor IoT)
-6. UC-05 → Highlight Resilience Score and how it is calculated
-7. UC-09 → Click "Auto-Analyze Region" (agentic reasoning demo)
-8. UC-06 → Launch Sandbox → click a building → show intervention + ROI
-9. UC-07 → Open Green Ledger → show minted Nature IDs → "Simulate Legacy Verification"
-10. UC-11 → Generate PDF Briefing → download (leave stakeholder with a report)
+6. UC-05 → Highlight the Dynamic Heat Risk Index (WHO/EPA thresholds)
+7. UC-09 → Agent gives automatic City Briefing on load. Click "Analyze City Heat Risk".
+8. UC-08 → Click a building on the map to trigger an AI Digital Twin Context Profile
+9. UC-06 → Launch Sandbox → click that same building → show intervention + ROI
+10. UC-07 → Open Green Ledger → show minted Nature IDs → "Simulate Legacy Verification"
+11. UC-11 → Click "Generate Briefing" → download PDF (leave stakeholder with a report)
 ```
 
 ---
 
-*Last updated: 2026-02-21 · Add new validated use cases as they are built.*
+*Last updated: 2026-02-21 · Embodying Planetary Intelligence.*

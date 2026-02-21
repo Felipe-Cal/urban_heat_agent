@@ -98,3 +98,4 @@ class MapConfig:
     center_lon: float = -118.2437
     bbox: Optional[BBox] = None
     simulations: list = field(default_factory=list)
+    annotations: list = field(default_factory=list)
