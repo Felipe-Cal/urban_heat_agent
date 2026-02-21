@@ -64,8 +64,8 @@ def restore_session():
 
     # extra-streamlit-components requires a small delay or multiple runs to get cookies
     try:
-        access_token = cookie_manager.get("sb-access-token")
-        refresh_token = cookie_manager.get("sb-refresh-token")
+        access_token = cookie_manager.get("sb-access-token") if cookie_manager else None
+        refresh_token = cookie_manager.get("sb-refresh-token") if cookie_manager else None
 
         if access_token and refresh_token:
             response = supabase.auth.set_session(access_token, refresh_token)
@@ -76,8 +76,9 @@ def restore_session():
         # Token might be invalid or expired, just clear them
         print(f"Session restoration failed: {e}")
         try:
-            cookie_manager.delete("sb-access-token")
-            cookie_manager.delete("sb-refresh-token")
+            if cookie_manager:
+                cookie_manager.delete("sb-access-token")
+                cookie_manager.delete("sb-refresh-token")
         except:
             pass
 
@@ -149,8 +150,9 @@ def handle_login(email, password):
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         if response.user and response.session:
             st.session_state["user_session"] = response.user
-            cookie_manager.set("sb-access-token", response.session.access_token, key="set_access_token")
-            cookie_manager.set("sb-refresh-token", response.session.refresh_token, key="set_refresh_token")
+            if cookie_manager:
+                cookie_manager.set("sb-access-token", response.session.access_token, key="set_access_token")
+                cookie_manager.set("sb-refresh-token", response.session.refresh_token, key="set_refresh_token")
             st.success("Login successful!")
             st.rerun()
     except Exception as e:
@@ -165,8 +167,9 @@ def handle_signup(email, password):
                 login_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 if login_response.session:
                     st.session_state["user_session"] = login_response.user
-                    cookie_manager.set("sb-access-token", login_response.session.access_token, key="signup_access_token")
-                    cookie_manager.set("sb-refresh-token", login_response.session.refresh_token, key="signup_refresh_token")
+                    if cookie_manager:
+                        cookie_manager.set("sb-access-token", login_response.session.access_token, key="signup_access_token")
+                        cookie_manager.set("sb-refresh-token", login_response.session.refresh_token, key="signup_refresh_token")
                     st.success("Account created successfully! Logging you in...")
                     time.sleep(1)
                     st.rerun()
@@ -185,8 +188,9 @@ def handle_logout():
         supabase.auth.sign_out()
     except Exception as e:
         pass # Ignore remote signout failures
-    cookie_manager.delete("sb-access-token")
-    cookie_manager.delete("sb-refresh-token")
+    if cookie_manager:
+        cookie_manager.delete("sb-access-token")
+        cookie_manager.delete("sb-refresh-token")
     st.session_state.clear()
     st.rerun()
 
