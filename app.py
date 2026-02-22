@@ -317,6 +317,23 @@ _LAYER_DATA_FIELD = {
     "sensors": "df_sensors", "buildings": "df_buildings", "traffic": "df_traffic",
 }
 
+# Map from toggle name → Tooltip description for UX context
+_LAYER_TOOLTIPS = {
+    "toggle_thermal": "Visualizes surface temperature data to identify heat islands.",
+    "toggle_sensors": "Shows real-time air quality sensors and their readings.",
+    "toggle_buildings": "Displays 3D building models for urban density context.",
+    "toggle_traffic": "Shows real-time traffic flow conditions.",
+    "toggle_trees": "Maps individual trees and canopy coverage.",
+    "toggle_forests": "Highlights larger urban forest areas.",
+    "toggle_gardens": "Shows community and botanical gardens.",
+    "toggle_water": "Displays bodies of water like lakes and rivers.",
+    "toggle_wetlands": "Highlights wetland areas important for cooling.",
+    "toggle_fountains": "Locates public drinking fountains.",
+    "toggle_parks": "Shows public parks and recreational areas.",
+    "toggle_green_roofs": "Identifies buildings with vegetation on roofs.",
+    "toggle_shelters": "Locates designated cooling centers and shelters.",
+}
+
 
 def activate_data_layers(data: CityData) -> None:
     """Enable all layers with data, leave thermal OFF (too noisy by default)."""
@@ -748,11 +765,12 @@ with col_map:
     map_placeholder = st.container()
 
     d = city_data
-    def _layer_toggle(label: str, key: str, has_data: bool) -> None:
+    def _layer_toggle(label: str, key: str, has_data: bool, help_text: str = None) -> None:
         st.toggle(
             label + (" (no data)" if not has_data else ""),
             key=key,
             disabled=not has_data,
+            help=help_text,
         )
 
     # (Pending logic moved higher up the script to avoid UI mutation lock)
@@ -760,27 +778,27 @@ with col_map:
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>MAP LAYERS</p>", unsafe_allow_html=True)
     r1, r2, r3 = st.columns(3)
     with r1:
-        _layer_toggle("Thermal", "toggle_thermal", not d.df_thermal.empty)
+        _layer_toggle("Thermal", "toggle_thermal", not d.df_thermal.empty, _LAYER_TOOLTIPS.get("toggle_thermal"))
     with r2:
-        _layer_toggle("Air Quality", "toggle_sensors", not d.df_sensors.empty)
+        _layer_toggle("Air Quality", "toggle_sensors", not d.df_sensors.empty, _LAYER_TOOLTIPS.get("toggle_sensors"))
     with r3:
-        _layer_toggle("Buildings", "toggle_buildings", not d.df_buildings.empty)
-        _layer_toggle("Traffic", "toggle_traffic", not d.df_traffic.empty)
+        _layer_toggle("Buildings", "toggle_buildings", not d.df_buildings.empty, _LAYER_TOOLTIPS.get("toggle_buildings"))
+        _layer_toggle("Traffic", "toggle_traffic", not d.df_traffic.empty, _LAYER_TOOLTIPS.get("toggle_traffic"))
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE & ASSETS</p>", unsafe_allow_html=True)
     n1, n2, n3 = st.columns(3)
     with n1:
-        _layer_toggle("Tree Canopy",       "toggle_trees",      not d.df_trees.empty)
-        _layer_toggle("Urban Forests",     "toggle_forests",    not d.df_forests.empty)
-        _layer_toggle("Community Gardens", "toggle_gardens",    not d.df_gardens.empty)
+        _layer_toggle("Tree Canopy",       "toggle_trees",      not d.df_trees.empty, _LAYER_TOOLTIPS.get("toggle_trees"))
+        _layer_toggle("Urban Forests",     "toggle_forests",    not d.df_forests.empty, _LAYER_TOOLTIPS.get("toggle_forests"))
+        _layer_toggle("Community Gardens", "toggle_gardens",    not d.df_gardens.empty, _LAYER_TOOLTIPS.get("toggle_gardens"))
     with n2:
-        _layer_toggle("Water Sources",     "toggle_water",      not d.df_water.empty)
-        _layer_toggle("Wetlands",          "toggle_wetlands",   not d.df_wetlands.empty)
-        _layer_toggle("Drinking Fountains","toggle_fountains",  not d.df_fountains.empty)
+        _layer_toggle("Water Sources",     "toggle_water",      not d.df_water.empty, _LAYER_TOOLTIPS.get("toggle_water"))
+        _layer_toggle("Wetlands",          "toggle_wetlands",   not d.df_wetlands.empty, _LAYER_TOOLTIPS.get("toggle_wetlands"))
+        _layer_toggle("Drinking Fountains","toggle_fountains",  not d.df_fountains.empty, _LAYER_TOOLTIPS.get("toggle_fountains"))
     with n3:
-        _layer_toggle("Public Parks",      "toggle_parks",      not d.df_parks.empty)
-        _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
-        _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
+        _layer_toggle("Public Parks",      "toggle_parks",      not d.df_parks.empty, _LAYER_TOOLTIPS.get("toggle_parks"))
+        _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty, _LAYER_TOOLTIPS.get("toggle_green_roofs"))
+        _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty, _LAYER_TOOLTIPS.get("toggle_shelters"))
 
     with map_placeholder:
         map_config = MapConfig(
