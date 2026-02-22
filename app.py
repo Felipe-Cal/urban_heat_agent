@@ -1,3 +1,4 @@
+import html
 import random
 from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime, time as dtime, timedelta
@@ -428,14 +429,18 @@ with col_agent:
                 avatar = ":material/person:" if msg["role"] == "user" else ":material/smart_toy:"
                 with st.chat_message(msg["role"], avatar=avatar):
                     if msg["role"] == "user":
-                        st.markdown(msg['content'] + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                        # Sanitize user input to prevent XSS
+                        safe_content = html.escape(msg['content'])
+                        st.markdown(safe_content + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                     else:
                         st.markdown(msg["content"], unsafe_allow_html=True)
 
         if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
             with chat_container:
                 with st.chat_message("user", avatar=":material/person:"):
-                    st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                    # Sanitize user input immediately
+                    safe_prompt = html.escape(prompt)
+                    st.markdown(safe_prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
             st.rerun()
