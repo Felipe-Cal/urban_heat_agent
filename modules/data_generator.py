@@ -257,11 +257,14 @@ def generate_mock_data(
         interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
 
         t_lo, t_hi = -10.0, 45.0
-        for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
-            t += temp_variation
-            frac = np.clip((t - t_lo) / (t_hi - t_lo), 0.0, 1.0)
-            norm_t = 0.05 + 0.45 * frac
-            thermal_data.append([r_lon, r_lat, norm_t])
+
+        # Vectorized calculation
+        interp_temps += temp_variation
+        frac = np.clip((interp_temps - t_lo) / (t_hi - t_lo), 0.0, 1.0)
+        norm_t = 0.05 + 0.45 * frac
+
+        # Combine into result array
+        thermal_data = np.column_stack((rand_lons, rand_lats, norm_t)).tolist()
             
         for lon, lat, t in zip(lons, lats, raw_temps):
             t += temp_variation
