@@ -196,7 +196,7 @@ Each intervention: decrements the $5M sandbox budget, adds a coloured overlay ci
 5. Open **Green Ledger** → verify the intervention row was appended with a Nature ID hash
 6. Click **Clear Interventions** → verify map resets and budget restores to $5M
 
-**Expected result:** Each click produces a differentiated, contextual intervention proposal and updates all dashboard metrics simultaneously.
+**Expected result:** Each click produces a differentiated, contextual intervention proposal and updates all metrics simultaneously.
 
 ---
 
@@ -331,7 +331,7 @@ With one click, the system generates a **formal bio-regional resilience briefing
 4. Wait for spinner → click **Download PDF Briefing**
 5. Verify PDF contains: city name, temperature reading, resilience score, layer context, recommendations
 
-**Expected result:** A multi-section Markdown-rendered PDF with the city's live dashboard context embedded.
+**Expected result:** A multi-section Markdown-rendered PDF with the city's live context embedded.
 
 ---
 
@@ -388,21 +388,21 @@ The **⚙️ Simulate Legacy Verification** button in the Green Ledger panel sho
 **Status:** ✅ Live
 
 ### What it demonstrates
-The system uses **Supabase** for email/password and Google OAuth authentication — gating the entire dashboard behind a login wall. This demonstrates the multi-stakeholder access model: different users (Heat Officers, Utility Providers, Climate Funders) would eventually see role-specific dashboards.
+The system uses **Supabase** for email/password and Google OAuth authentication — gating the application behind a login wall. This demonstrates the multi-stakeholder access model: different users (Heat Officers, Utility Providers, Climate Funders) would eventually see role-specific views.
 
 ### What is missing
-- All authenticated users see the same dashboard — there are no roles or permission levels.
+- All authenticated users see the same views — there are no roles or permission levels.
 - Session persistence via cookies (`extra-streamlit-components`) is unreliable in the current implementation.
 - No profile page or user-specific saved state (favourite cities, custom ledger views).
 
 ### How to test
 1. Open app at `localhost:8501` (unauthenticated)
-2. Verify the login/signup screen blocks dashboard access
+2. Verify the login/signup screen blocks application access
 3. Sign up with a test email → verify auto-login after registration
-4. Log out → verify session is cleared and dashboard is inaccessible
-5. Log back in → verify dashboard loads with previous city data
+4. Log out → verify session is cleared and application is inaccessible
+5. Log back in → verify application loads with previous city data
 
-**Expected result:** Login gates the dashboard; sign-up creates an account and auto-logs in; logout clears session.
+**Expected result:** Login gates the application; sign-up creates an account and auto-logs in; logout clears session.
 
 ---
 
