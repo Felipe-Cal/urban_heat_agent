@@ -6,6 +6,7 @@ making the function easier to test, call, and extend.
 """
 import pydeck as pdk
 import streamlit as st
+import pandas as pd
 
 from modules.models import MapConfig
 
@@ -135,9 +136,13 @@ def create_map(config: MapConfig) -> pdk.Deck:
     # ------------------------------------------------------------------
     # Sandbox simulations overlay
     # ------------------------------------------------------------------
+    sim_data = config.simulations if config.simulations else []
+    if isinstance(sim_data, list):
+        sim_data = pd.DataFrame(sim_data)
+
     layers.append(pdk.Layer(
         "ScatterplotLayer", id="Simulations",
-        data=config.simulations if config.simulations else [],
+        data=sim_data,
         get_position="[lon, lat]",
         get_fill_color="color",
         get_radius="radius",
@@ -150,10 +155,14 @@ def create_map(config: MapConfig) -> pdk.Deck:
     # ------------------------------------------------------------------
     # Agent Annotations overlay
     # ------------------------------------------------------------------
+    ann_data = config.annotations if config.annotations else []
+    if isinstance(ann_data, list):
+        ann_data = pd.DataFrame(ann_data)
+
     layers.append(pdk.Layer(
         "ScatterplotLayer", id="Annotations",
-        data=config.annotations if config.annotations else [],
-        get_position=["lon", "lat"],
+        data=ann_data,
+        get_position="[lon, lat]",
         get_fill_color="color",
         get_radius="radius",
         stroked=True,
@@ -161,8 +170,8 @@ def create_map(config: MapConfig) -> pdk.Deck:
         line_width_min_pixels=3,
         pickable=True,
         auto_highlight=True,
-        radius_min_pixels=10,
-        radius_max_pixels=50,
+        radius_min_pixels=12,
+        radius_max_pixels=60,
     ))
 
     # ------------------------------------------------------------------
