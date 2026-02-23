@@ -1,15 +1,19 @@
-# Gaia Heat Sync — Planetary Intelligence Dashboard
+# Gaia Heat Sync — Urban Heat Sync Agent
 
-A high-fidelity Streamlit dashboard for urban heat resilience, built for the Open Earth Foundation. It visualises live thermal, air quality, and nature ID data on an interactive 3D map, and features an AI agent for bio-regional analysis and ROI simulation.
+An intelligent, agent-driven spatial application for urban heat resilience, built for the Open Earth Foundation. It acts as a "Trojan Horse" to force the creation of Nature IDs for trees and water resources, scaling seamlessly from a single street to managing city-wide grids to solve lethal heat waves.
+
+Unlike a static dashboard, Gaia Heat Sync is a living Digital Twin with two-way AI agent interaction: the map informs the Agent, and the Agent controls the map. The system actively senses heat, plans cooling, acts via infrastructure interventions, and reflects on outcomes—directly protecting vulnerable populations in "data deserts".
 
 ## Features
 
-- **Live Data** — Real temperature & AQI from Open-Meteo; real geographic assets from OpenStreetMap
-- **Multi-Layer Map** — 13 toggleable layers including thermal, buildings, traffic, and various nature assets (trees, parks, water, etc.)
-- **Gaia Agent** — GPT-4o-mini-powered AI agent for region analysis, interventions, and Q&A
-- **ROI Sandbox** — Click-to-simulate cooling interventions with cost/impact estimates
-- **Green Ledger** — Simulated Nature ID hashing and verifiable data provenance
-- **PDF Briefings** — Auto-generated professional briefing reports
+- **Two-Way Agentic Interaction**
+  - **Map-to-Agent:** Clicking on specific map assets (e.g., buildings, trees, cooling centers) sends rich spatial context to the Gaia Agent to analyze localized risk and propose exact, contextual interventions.
+  - **Agent-to-Map:** Users can naturally converse with the agent, which actively manipulates the digital twin—toggling layers, switching cities, identifying thermal anomalies, and deploying simulated infrastructure networks.
+- **Continuous Learning Loop** — Senses real-time heat and AQI (Open-Meteo), plans cooling strategies based on asset data (OpenStreetMap), acts in a Sandbox environment, and reflects on outcomes.
+- **Dynamic Digital Twin** — 13 toggleable mapping layers dynamically updated by user clicks or AI generation.
+- **ROI Sandbox & Parametric Finance** — Simulates specific cooling interventions with realistic cost and impact estimates (e.g., °C cooling offset, ER visits avoided).
+- **Green Ledger (Tech Spine)** — Mints verifiable "Nature IDs" onto a Verifiable Data Provenance ledger for trees, water, and cooling assets.
+- **PDF Briefings** — Auto-generated, professional regional briefing reports.
 
 ## Use Case Showcase
 

@@ -1,6 +1,6 @@
-# Gaia Heat Sync — Use Case Showcase Guide
+# Gaia Heat Sync — Urban Heat Sync Agent Showcase Guide
 
-> **Purpose:** This document lists every showcase-ready use case for the Urban Heat Sync Agent prototype, ordered by strategic value. Each entry explains what the feature demonstrates, how to test it live, what is still missing, and how hard the missing piece would be to build.
+This document outlines 14 distinct capabilities of the Gaia Heat Sync Agent. It is designed to demonstrate how the platform acts as a continuous learning loop (Senses, Plans, Acts, Reflects) to build urban resilience against lethal heat waves, while simultaneously forcing the creation of Verifiable Nature IDs as its core tech spine. demonstrates, how to test it live, what is still missing, and how hard the missing piece would be to build.
 
 ---
 
