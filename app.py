@@ -12,14 +12,7 @@ from modules.data_generator import generate_mock_data
 from modules.map_layers import create_map
 from modules.agent_logic import AgentSimulator
 from modules.models import CityData, LayerToggles, MapConfig, BBox
-import sys
-try:
-    import extra_streamlit_components as stx
-except ImportError:
-    st.warning("⚠️ Module 'extra_streamlit_components' not found. Session recovery will be disabled.")
-    class DummyStx:
-        def CookieManager(self): return None
-    stx = DummyStx()
+import extra_streamlit_components as stx
 
 # 1. Page Config - MUST BE FIRST
 st.set_page_config(
