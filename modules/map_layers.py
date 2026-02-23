@@ -123,7 +123,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
         layers.append(pdk.Layer(
             "ScatterplotLayer", id="Sensors",
             data=data.df_sensors,
-            get_position="[lon, lat]",
+            get_position=["lon", "lat"],
             get_fill_color="color",
             get_radius=150,
             pickable=True,
@@ -153,7 +153,7 @@ def create_map(config: MapConfig) -> pdk.Deck:
     layers.append(pdk.Layer(
         "ScatterplotLayer", id="Annotations",
         data=config.annotations if config.annotations else [],
-        get_position="[lon, lat]",
+        get_position=["lon", "lat"],
         get_fill_color="color",
         get_radius="radius",
         stroked=True,
@@ -161,8 +161,8 @@ def create_map(config: MapConfig) -> pdk.Deck:
         line_width_min_pixels=3,
         pickable=True,
         auto_highlight=True,
-        radius_min_pixels=30,
-        radius_max_pixels=100,
+        radius_min_pixels=10,
+        radius_max_pixels=50,
     ))
 
     # ------------------------------------------------------------------

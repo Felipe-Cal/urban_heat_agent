@@ -313,6 +313,7 @@ def generate_mock_data(
             df_traffic=existing_data.df_traffic,
             current_temp=current_temp,
             current_aqi=current_aqi,
+            asset_counts=existing_data.asset_counts,
             fetch_error=fetch_error,
         )
 
@@ -431,6 +432,21 @@ def generate_mock_data(
         wetlands = [e for e in elements if e.get("tags", {}).get("natural") == "wetland"]
         raw_buildings = [e for e in elements if "building" in e.get("tags", {})]
         raw_traffic = [e for e in elements if "highway" in e.get("tags", {})]
+
+        # Calculate true totals before slicing
+        asset_counts = {
+            "trees": len(trees),
+            "water": len(water),
+            "parks": len(parks),
+            "shelters": len(shelters),
+            "fountains": len(fountains),
+            "green_roofs": len(green_roofs),
+            "gardens": len(gardens),
+            "forests": len(forests),
+            "wetlands": len(wetlands),
+            "buildings": len(raw_buildings),
+            "traffic": len(raw_traffic)
+        }
 
         # Buildings (PolygonLayer)
         for b_el in raw_buildings[:5000]:
@@ -585,6 +601,7 @@ def generate_mock_data(
         df_traffic=pd.DataFrame(traffic_data),
         current_temp=current_temp,
         current_aqi=current_aqi,
+        asset_counts=asset_counts,
         fetch_error=fetch_error,
     )
 

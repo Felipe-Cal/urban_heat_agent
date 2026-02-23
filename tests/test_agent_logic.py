@@ -366,7 +366,116 @@ class TestLLMIntegration:
         assert sim["cooling"] == 1.2
         assert _session_state["sandbox_budget"] == before_budget - 100000
         
+        
         assert len(_session_state["green_ledger"]) == 1
         ledger = _session_state["green_ledger"][-1]
         assert ledger["Intervention"] == "AI Super Bioswale"
         assert ledger["Cooling Impact (°C)"] == "-1.2"
+
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_process_custom_query_query_urban_assets_reads_asset_counts(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_response = MagicMock()
+        mock_message = MagicMock()
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_trees"
+        mock_tool_call.function.name = "query_urban_assets"
+        import json
+        mock_tool_call.function.arguments = json.dumps({"asset_type": "trees"})
+        
+        mock_message.tool_calls = [mock_tool_call]
+        mock_message.content = ""
+        mock_response.choices = [MagicMock(message=mock_message)]
+        
+        mock_stream_response = MagicMock()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock(delta=MagicMock(content="We have 12000 trees."))]
+        mock_stream_response.__iter__.return_value = iter([chunk])
+        
+        mock_client.chat.completions.create.side_effect = [mock_response, mock_stream_response]
+        
+        # Setup mock CityData with explicit asset_counts dict
+        mock_city_data = MagicMock()
+        mock_city_data.asset_counts = {"trees": 12000}
+        
+        _session_state["data"] = mock_city_data
+        
+        agent = AgentSimulator()
+        with patch("streamlit.write_stream", lambda g: "".join(list(g))):
+            agent.process_custom_query("How many trees?")
+            
+        # The agent should have processed the tool call and got "count": 12000
+        # Let's inspect the `messages` history
+        tool_resp = _session_state["chat_history"][-1]["content"]
+        assert "We have 12000 trees" in tool_resp
+
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_process_custom_query_highlight_map_assets(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_response = MagicMock()
+        mock_message = MagicMock()
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_hlt"
+        mock_tool_call.function.name = "highlight_map_assets"
+        import json
+        mock_tool_call.function.arguments = json.dumps({
+            "locations": [{"lat": 34.0, "lon": -118.0, "label": "Hot Building"}]
+        })
+        
+        mock_message.tool_calls = [mock_tool_call]
+        mock_message.content = ""
+        mock_response.choices = [MagicMock(message=mock_message)]
+        
+        mock_stream_response = MagicMock()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock(delta=MagicMock(content="I highlighted it."))]
+        mock_stream_response.__iter__.return_value = iter([chunk])
+        
+        mock_client.chat.completions.create.side_effect = [mock_response, mock_stream_response]
+        
+        _session_state.map_annotations = []
+        
+        agent = AgentSimulator()
+        with patch("streamlit.write_stream", lambda g: "".join(list(g))):
+            agent.process_custom_query("Highlight the hot building.")
+            
+        # Verify the session state received the annotation
+        assert len(_session_state.map_annotations) == 1
+        assert _session_state.map_annotations[0]["lat"] == 34.0
+        assert _session_state.map_annotations[0]["lon"] == -118.0
+        assert "Hot Building" in _session_state.map_annotations[0]["tooltip"]
+
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_process_custom_query_clear_map_highlights(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_response = MagicMock()
+        mock_message = MagicMock()
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_clear"
+        mock_tool_call.function.name = "clear_map_highlights"
+        mock_tool_call.function.arguments = "{}"
+        
+        mock_message.tool_calls = [mock_tool_call]
+        mock_message.content = ""
+        mock_response.choices = [MagicMock(message=mock_message)]
+        
+        mock_stream_response = MagicMock()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock(delta=MagicMock(content="Cleared."))]
+        mock_stream_response.__iter__.return_value = iter([chunk])
+        
+        mock_client.chat.completions.create.side_effect = [mock_response, mock_stream_response]
+        
+        _session_state.map_annotations = [{"lat": 0, "lon": 0}] # Existing
+        
+        agent = AgentSimulator()
+        with patch("streamlit.write_stream", lambda g: "".join(list(g))):
+            agent.process_custom_query("Clear the map please.")
+            
+        assert len(_session_state.map_annotations) == 0

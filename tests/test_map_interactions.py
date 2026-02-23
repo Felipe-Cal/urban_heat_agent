@@ -64,7 +64,9 @@ def test_map_interaction_triggers_agent():
     # C. Verify the agent responded with analysis for the nature asset (mocked or real)
     assistant_replied = False
     for content in chat_messages:
-        if "primary cooling anchor" in content or "Verify Vitality" in content:
+        # The new dynamic logic (and its fallback) always prints a header like:
+        # Profiling Pine Tree (Tree Canopy)
+        if "Profiling Pine Tree" in content or "Tree Canopy" in content:
             assistant_replied = True
             break
             
@@ -145,3 +147,39 @@ def test_slider_state_preserves_toggles():
     # 3. Verify toggles did NOT reset to False after the Slider Interaction
     assert at.session_state["toggle_trees"] is True, "Trees toggle was wiped out by the Slider!"
     assert at.session_state["toggle_water"] is True, "Water toggle was wiped out by the Slider!"
+
+def test_agent_response_formatting_is_markdown():
+    """
+    Ensure the agent's responses use Markdown blockquotes and do NOT contain 
+    raw HTML <div> tags which break Streamlit's write_stream UI rendering.
+    """
+    at = AppTest.from_file("app.py", default_timeout=30)
+    
+    class MockUser:
+        def __init__(self, email, id):
+            self.email = email
+            self.id = id
+            
+    at.session_state["user_session"] = MockUser("test@gaiapattern.com", "123")
+    
+    mock_asset = {
+        "id": "tree_789",
+        "name": "Oak Tree",
+        "type": "Tree Canopy",
+        "lat": 34.05,
+        "lon": -118.24
+    }
+    at.session_state["last_clicked_obj_id"] = "tree_789"
+    at.session_state["last_clicked_obj"] = mock_asset
+    at.session_state["pending_map_click"] = "Selected Oak Tree (tree_789)"
+    
+    at.run()
+    
+    chat_messages = [msg.markdown[0].value for msg in at.chat_message if msg.markdown]
+    
+    for content in chat_messages:
+        # The assistant messages should not have <div>
+        # We explicitly check the mock fallback or streamed text depending on API key state
+        if "Profiling" in content:
+            assert "<div" not in content.lower(), f"Found raw HTML div tag in agent response! Response text: {content}"
+            assert "> *" in content, "Expected Markdown blockquote styling (> *text*) for the agent header, but found none."
