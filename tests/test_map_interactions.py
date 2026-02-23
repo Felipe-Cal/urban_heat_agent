@@ -112,3 +112,36 @@ def test_layer_toggles_preserved_on_map_click():
     # 3. Verify toggles did NOT reset to False after the Click Interaction
     assert at.session_state["toggle_trees"] is True, "Trees toggle was wiped out by the map click loop!"
     assert at.session_state["toggle_water"] is True, "Water toggle was wiped out by the map click loop!"
+
+def test_slider_state_preserves_toggles():
+    """
+    Simulate a user enabling layers, then adjusting the Temporal Heat Slider. 
+    Ensure the toggles maintain their True state because of the on_change callback refactor.
+    """
+    at = AppTest.from_file("app.py", default_timeout=30)
+    
+    class MockUser:
+        def __init__(self, email, id):
+            self.email = email
+            self.id = id
+            
+    at.session_state["user_session"] = MockUser("test@gaiapattern.com", "123")
+    at.run()
+    
+    # 1. User toggles on "Trees" and "Water" manually
+    at.session_state["toggle_trees"] = True
+    at.session_state["toggle_water"] = True
+    at.run()
+    
+    assert at.session_state["toggle_trees"] is True
+    
+    # 2. User moves the Time Slider
+    from datetime import time as dtime
+    
+    # Set the key directly or use the widget property
+    at.slider(key="time_slider").set_value(dtime(15, 30))
+    at.run()
+    
+    # 3. Verify toggles did NOT reset to False after the Slider Interaction
+    assert at.session_state["toggle_trees"] is True, "Trees toggle was wiped out by the Slider!"
+    assert at.session_state["toggle_water"] is True, "Water toggle was wiped out by the Slider!"

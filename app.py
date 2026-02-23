@@ -436,39 +436,44 @@ with col_agent:
     # Quick Actions
     st.markdown("<p style='font-size: 0.8em; color: #888; font-weight: 600;'>QUICK ACTIONS</p>", unsafe_allow_html=True)
 
+    def cb_analyze_risk(): st.session_state.agent.auto_analyze_region()
+    def cb_map_deserts():
+        st.session_state.agent.simulate_deployment()
+        st.session_state.toggle_sensors = True
+    def cb_exit_sandbox():
+        st.session_state.sandbox_mode = False
+        st.session_state.simulations = []
+        st.session_state.green_ledger = []
+        st.session_state.simulated_cooling = 0.0
+        st.session_state.sandbox_budget = 5_000_000.0
+    def cb_launch_sandbox(): st.session_state.sandbox_mode = True
+    def cb_thermal_risk():
+        st.session_state.agent.simulate_intervention()
+        st.session_state.toggle_trees = True
+    def cb_gen_briefing(): st.session_state.generating_pdf = True
+    def cb_clear_interventions():
+        st.session_state.simulations = []
+        st.session_state.green_ledger = []
+        st.session_state.simulated_cooling = 0.0
+        st.session_state.sandbox_budget = 5_000_000.0
+    def cb_sim_verification(): st.session_state.agent.simulate_verification()
+
     # Preferred Action (Primary/Blue)
-    if st.button(":material/public: Analyze City Heat Risk", use_container_width=True, type="primary"):
-        st.session_state.pending_quick_action = "auto_analyze"
-        st.rerun()
+    st.button(":material/public: Analyze City Heat Risk", use_container_width=True, type="primary", on_click=cb_analyze_risk)
 
     btn_col1, btn_col2 = st.columns(2)
     
     with btn_col1:
-        if st.button(":material/radar: Map Data Deserts", use_container_width=True):
-            st.session_state.pending_quick_action = "data_deserts"
-            st.rerun()
+        st.button(":material/radar: Map Data Deserts", use_container_width=True, on_click=cb_map_deserts)
             
         if st.session_state.sandbox_mode:
-            if st.button(":material/cancel: Exit Sandbox", use_container_width=True):
-                st.session_state.sandbox_mode = False
-                st.session_state.simulations = []
-                st.session_state.green_ledger = []
-                st.session_state.simulated_cooling = 0.0
-                st.session_state.sandbox_budget = 5_000_000.0
-                st.rerun()
+            st.button(":material/cancel: Exit Sandbox", use_container_width=True, on_click=cb_exit_sandbox)
         else:
-            if st.button(":material/nature: Launch Sandbox", use_container_width=True):
-                st.session_state.sandbox_mode = True
-                st.rerun()
+            st.button(":material/nature: Launch Sandbox", use_container_width=True, on_click=cb_launch_sandbox)
 
     with btn_col2:
-        if st.button(":material/thermostat: Map Thermal Risk", use_container_width=True):
-            st.session_state.pending_quick_action = "thermal_risk"
-            st.rerun()
-            
-        if st.button(":material/summarize: Generate Briefing", use_container_width=True):
-            st.session_state.generating_pdf = True
-            st.rerun()
+        st.button(":material/thermostat: Map Thermal Risk", use_container_width=True, on_click=cb_thermal_risk)
+        st.button(":material/summarize: Generate Briefing", use_container_width=True, on_click=cb_gen_briefing)
 
     # Optional Sandbox Active Info
     if st.session_state.sandbox_mode:
@@ -479,12 +484,7 @@ with col_agent:
             icon=":material/info:",
         )
         if st.session_state.simulations:
-            if st.button("🗑️ Clear Interventions", use_container_width=True):
-                st.session_state.simulations = []
-                st.session_state.green_ledger = []
-                st.session_state.simulated_cooling = 0.0
-                st.session_state.sandbox_budget = 5_000_000.0
-                st.rerun()
+            st.button("🗑️ Clear Interventions", use_container_width=True, on_click=cb_clear_interventions)
 
     st.markdown("<br/>", unsafe_allow_html=True)
 
@@ -495,9 +495,7 @@ with col_agent:
     ):
         if not st.session_state.green_ledger:
             st.caption("No cooling claims registered yet. Mint Nature IDs in the Sandbox to build the ledger.")
-            if st.button("⚙️ Simulate Legacy Verification", use_container_width=True):
-                agent.simulate_verification()
-                st.rerun()
+            st.button("⚙️ Simulate Legacy Verification", use_container_width=True, on_click=cb_sim_verification)
         else:
             ledger_df = pd.DataFrame(st.session_state.green_ledger)
             st.dataframe(ledger_df, use_container_width=True, hide_index=True)
@@ -508,7 +506,6 @@ with col_agent:
             if pdf_bytes:
                 st.session_state.pdf_ready = pdf_bytes
             st.session_state.generating_pdf = False
-            st.rerun()
 
     if "pdf_ready" in st.session_state:
         city_slug = st.session_state.selected_city_name.split(",")[0].replace(" ", "_")
@@ -529,13 +526,8 @@ with col_map:
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 1, 1, 1])
 
     with ctrl1:
-        selected_city = st.selectbox(
-            ":material/location_on: Active Bio-Region",
-            options=list(CITIES.keys()),
-            index=list(CITIES.keys()).index(st.session_state.selected_city_name),
-            label_visibility="collapsed",
-        )
-        if selected_city != st.session_state.selected_city_name:
+        def cb_city_change():
+            selected_city = st.session_state.city_selector
             st.session_state.selected_city_name = selected_city
             # Reset slider to the new city's current local time
             st.session_state.time_of_day = get_city_local_time(selected_city)
@@ -548,9 +540,16 @@ with col_map:
                 radius_meters=coords.get("radius", 2500),
             )
             activate_data_layers(st.session_state.data)
-            city_data = st.session_state.data
             st.session_state.need_initial_analysis = True
-            st.rerun()
+
+        st.selectbox(
+            ":material/location_on: Active Bio-Region",
+            options=list(CITIES.keys()),
+            index=list(CITIES.keys()).index(st.session_state.selected_city_name),
+            label_visibility="collapsed",
+            key="city_selector",
+            on_change=cb_city_change
+        )
 
     # ── Shared temporal calculations (used by Heat Risk + Avg Temp) ──────────
     from datetime import datetime, time as dtime
@@ -712,16 +711,8 @@ with col_map:
     """, unsafe_allow_html=True)
 
     # Use a slider with 15-minute increments
-    t_val = st.slider(
-        "Temporal Heat Simulation",
-        min_value=dtime(0, 0),
-        max_value=dtime(23, 45),
-        value=current_time,
-        step=timedelta(minutes=15),
-        format="HH:mm"
-    )
-    
-    if t_val != current_time:
+    def cb_time_change():
+        t_val = st.session_state.time_slider
         st.session_state.time_of_day = t_val
         coords = CITIES[st.session_state.selected_city_name]
         st.session_state.data = fetch_data_with_loading(
@@ -732,8 +723,17 @@ with col_map:
             radius_meters=coords.get("radius", 2500),
             existing_data=st.session_state.data,
         )
-        city_data = st.session_state.data
-        st.rerun()
+
+    st.slider(
+        "Temporal Heat Simulation",
+        min_value=dtime(0, 0),
+        max_value=dtime(23, 45),
+        value=current_time,
+        step=timedelta(minutes=15),
+        format="HH:mm",
+        key="time_slider",
+        on_change=cb_time_change
+    )
 
     # Map Visualization Placeholder
     map_placeholder = st.container()
