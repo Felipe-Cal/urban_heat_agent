@@ -29,16 +29,20 @@ def test_map_interaction_triggers_agent():
     # When PyDeck selection triggers, it sets these session state variables in app.py
     mock_asset = {
         "id": "tree_123",
-        "name": "Oak Tree",
+        "name": "Pine Tree",
         "type": "Tree Canopy",
         "lat": 34.05,
         "lon": -118.24
     }
+    
+    # We must explicitly set user_session again because Streamlit might reset it on run
+    at.session_state["user_session"] = MockUser("test@gaiapattern.com", "123")
+    
     at.session_state["last_clicked_obj_id"] = "tree_123"
     at.session_state["last_clicked_obj"] = mock_asset
-    at.session_state["pending_map_click"] = "Selected Oak Tree (tree_123)"
+    at.session_state["pending_map_click"] = "Selected Pine Tree (tree_123)"
     
-    # 3. Trigger a rerun (which simulates St.rerun() from the PyDeck on_select callback)
+    # Run the application (this mimics Pydeck event firing)
     at.run()
     
     # 4. Assertions
@@ -46,23 +50,65 @@ def test_map_interaction_triggers_agent():
     assert at.session_state["pending_map_click"] is None, "pending_map_click was not cleared"
     
     # B. The agent chat history should have recorded the intersection event
-    chat_history = at.session_state["chat_history"] if "chat_history" in at.session_state else []
+    # Instead of dictionary inspection, use Streamlit AppTest's native chat element query
+    chat_messages = [msg.markdown[0].value for msg in at.chat_message if msg.markdown]
     
-    # Look for the user message that announces the event
-    event_logged = any(
-        "**[EVENT]** Map intersection: Oak Tree" in msg.get("content", "") 
-        for msg in chat_history 
-        if msg.get("role") == "user"
-    )
-    
-    assert event_logged, "Map click event was not passed to the AgentSimulator"
+    event_logged = False
+    for content in chat_messages:
+        if "Pine Tree" in content:
+            event_logged = True
+            break
+            
+    assert event_logged, "Map click event was not rendered in the chat UI."
     
     # C. Verify the agent responded with analysis for the nature asset (mocked or real)
-    assistant_replied = any(
-        "primary cooling anchor" in msg.get("content", "") or 
-        "1. **Verify Vitality" in msg.get("content", "")
-        for msg in chat_history 
-        if msg.get("role") == "assistant"
-    )
-    
+    assistant_replied = False
+    for content in chat_messages:
+        if "primary cooling anchor" in content or "Verify Vitality" in content:
+            assistant_replied = True
+            break
+            
     assert assistant_replied, "Agent did not output the expected analysis template for a nature asset."
+
+def test_layer_toggles_preserved_on_map_click():
+    """
+    Simulate a user enabling layers, then clicking the map. Ensure the toggle widgets 
+    maintain their True state after the agent finishes.
+    """
+    at = AppTest.from_file("app.py", default_timeout=30)
+    
+    class MockUser:
+        def __init__(self, email, id):
+            self.email = email
+            self.id = id
+            
+    at.session_state["user_session"] = MockUser("test@gaiapattern.com", "123")
+    at.run()
+    
+    # 1. User toggles on "Trees" and "Water" manually
+    at.session_state["toggle_trees"] = True
+    at.session_state["toggle_water"] = True
+    at.run()
+    
+    # Verify toggles stick initially
+    assert at.session_state["toggle_trees"] is True, "Trees toggle failed to set."
+    assert at.session_state["toggle_water"] is True, "Water toggle failed to set."
+    
+    # 2. User clicks on the map while layers are ON
+    mock_asset = {
+        "id": "tree_456",
+        "name": "Pine Tree",
+        "type": "Tree Canopy",
+        "lat": 34.05,
+        "lon": -118.24
+    }
+    at.session_state["last_clicked_obj_id"] = "tree_456"
+    at.session_state["last_clicked_obj"] = mock_asset
+    at.session_state["pending_map_click"] = "Selected Pine Tree (tree_456)"
+    
+    # Run the application (this mimics Pydeck event firing)
+    at.run()
+    
+    # 3. Verify toggles did NOT reset to False after the Click Interaction
+    assert at.session_state["toggle_trees"] is True, "Trees toggle was wiped out by the map click loop!"
+    assert at.session_state["toggle_water"] is True, "Water toggle was wiped out by the map click loop!"

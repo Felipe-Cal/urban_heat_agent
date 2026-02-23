@@ -262,23 +262,6 @@ with st.sidebar:
     if st.button("Log Out"):
         handle_logout()
 
-if st.session_state.get("pending_quick_action"):
-    action = st.session_state.pending_quick_action
-    st.session_state.pending_quick_action = None
-    
-    if action == "data_deserts":
-        st.session_state.agent.simulate_deployment()
-        st.session_state.toggle_sensors = True
-    elif action == "thermal_risk":
-        st.session_state.agent.simulate_intervention()
-        st.session_state.toggle_trees = True
-    elif action == "auto_analyze":
-        st.session_state.agent.auto_analyze_region()
-        
-    # st.rerun() removed to avoid resetting layer toggles
-    pass
-
-
 # Layer toggles — all off by default on first page load.
 # activate_data_layers() will turn on non-thermal layers once data is ready.
 _ALL_LAYERS = [
@@ -351,6 +334,32 @@ if st.session_state.get("need_initial_analysis"):
 city_data: CityData = st.session_state.data
 agent: AgentSimulator = st.session_state.agent
 
+# Process Pending Map Clicks and Actions BEFORE UI rendering
+# This ensures that updating toggle states happens before
+# Streamlit binds them to the frontend widgets.
+if st.session_state.pending_map_click:
+    obj = st.session_state.last_clicked_obj
+    st.session_state.pending_map_click = None
+    if st.session_state.sandbox_mode:
+        agent.simulate_intervention_on_asset(obj)
+    else:
+        agent.analyze_asset(obj)
+    # NO st.rerun() here. Let the script flow naturaly downwards.
+
+if st.session_state.get("pending_quick_action"):
+    action = st.session_state.pending_quick_action
+    st.session_state.pending_quick_action = None
+    
+    if action == "data_deserts":
+        agent.simulate_deployment()
+        st.session_state.toggle_sensors = True
+    elif action == "thermal_risk":
+        agent.simulate_intervention()
+        st.session_state.toggle_trees = True
+    elif action == "auto_analyze":
+        agent.auto_analyze_region()
+    # NO st.rerun() here either.
+
 # Data Sanity Check
 if city_data.df_buildings.empty and city_data.df_trees.empty:
     st.toast("⚠️ No map data (buildings/nature) returned from OSM for this area.", icon="ℹ️")
@@ -420,17 +429,7 @@ with col_agent:
                     st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
-            st.rerun()
-
-        if st.session_state.pending_map_click:
-            obj = st.session_state.last_clicked_obj
-            st.session_state.pending_map_click = None
-            with chat_container:
-                if st.session_state.sandbox_mode:
-                    agent.simulate_intervention_on_asset(obj)
-                else:
-                    agent.analyze_asset(obj)
-            st.rerun()
+            # Remove st.rerun() so layer toggles are not lost
 
     st.markdown("<br/>", unsafe_allow_html=True)
 
