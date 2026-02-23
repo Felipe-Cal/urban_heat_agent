@@ -52,6 +52,10 @@ def restore_session():
     if not supabase or not cookie_manager:
         return
 
+    # If we are explicitly logging out, don't try to restore!
+    if st.session_state.get("logout_in_progress"):
+        return
+
     if st.session_state.get("user_session"):
         return
 
@@ -128,6 +132,7 @@ _state_defaults = {
     "need_initial_analysis": True,
     "last_fetched_city":  None,
     "map_annotations":    [],
+    "city_selector":      "New York City, USA",
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -181,13 +186,23 @@ def handle_logout():
         supabase.auth.sign_out()
     except Exception as e:
         pass # Ignore remote signout failures
+    
+    # Mark logout in progress to stop restore_session from auto-logging back in
+    st.session_state["logout_in_progress"] = True
+    
     if cookie_manager:
         cookie_manager.delete("sb-access-token")
         cookie_manager.delete("sb-refresh-token")
-    st.session_state.clear()
+        time.sleep(0.5)  # Wait for cookies to actually delete before rerun
+        
+    # Clear session values but keep essential flags
+    for key in list(st.session_state.keys()):
+        if key not in ["logout_in_progress", "light_mode"]:
+            del st.session_state[key]
+            
     st.rerun()
 
-def handle_google_login():
+def get_google_login_url():
     try:
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
@@ -195,16 +210,19 @@ def handle_google_login():
                 "redirect_to": "http://localhost:8501"
             }
         })
-        if response.url:
-            st.session_state["waiting_for_oauth"] = True
-            st.markdown(f'<meta http-equiv="refresh" content="0;url={response.url}">', unsafe_allow_html=True)
+        return response.url
     except Exception as e:
         st.error(f"Google login failed: {e}")
+        return None
 
 # We depend entirely on st.session_state["user_session"] which is unique per browser session.
 
 # 6. Main App Check: Show Login Page if not authenticated
 if not st.session_state.get("user_session"):
+    # Clear the logout flag now that we've successfully reached the login page
+    if st.session_state.get("logout_in_progress"):
+        st.session_state["logout_in_progress"] = False
+        
     st.markdown("<h1 style='text-align: center;'>🌍 Gaia Heat Sync</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>Planetary Intelligence Platform</h3>", unsafe_allow_html=True)
     st.write("---")
@@ -230,8 +248,15 @@ if not st.session_state.get("user_session"):
                         st.warning("Please provide both email and password.")
             
             st.markdown("---")
-            if st.button("Continue with Google 🚀", use_container_width=True):
-                handle_google_login()
+            if "google_auth_url" not in st.session_state:
+                st.session_state.google_auth_url = get_google_login_url()
+
+            if st.session_state.google_auth_url:
+                st.link_button(
+                    "Continue with Google 🚀",
+                    st.session_state.google_auth_url,
+                    use_container_width=True
+                )
                         
         with tab2:
             st.subheader("Create a new account")
@@ -337,14 +362,13 @@ agent: AgentSimulator = st.session_state.agent
 # Process Pending Map Clicks and Actions BEFORE UI rendering
 # This ensures that updating toggle states happens before
 # Streamlit binds them to the frontend widgets.
-if st.session_state.pending_map_click:
+if st.session_state.pending_map_click and st.session_state.sandbox_mode:
     obj = st.session_state.last_clicked_obj
     st.session_state.pending_map_click = None
-    if st.session_state.sandbox_mode:
-        agent.simulate_intervention_on_asset(obj)
-    else:
-        agent.analyze_asset(obj)
+    agent.simulate_intervention_on_asset(obj)
     # NO st.rerun() here. Let the script flow naturaly downwards.
+# NOTE: If we are NOT in sandbox_mode, we leave pending_map_click 
+# mapping to analyze_asset so we can stream it visually inside `chat_container` later.
 
 if st.session_state.get("pending_quick_action"):
     action = st.session_state.pending_quick_action
@@ -375,15 +399,16 @@ if st.session_state.data.fetch_error:
     city_data = st.session_state.data
 
 # --- MAIN LAYOUT ---
-# Theme Toggle at Top Right — pure CSS approach (no config.toml writes)
-# Note: no explicit st.rerun() needed — the button click already triggers a
-# Streamlit rerun, and load_css() will re-inject the correct theme CSS.
-t1, t2 = st.columns([95, 5])
+# Theme Toggle and Logout at Top Right
+t1, t2, t3 = st.columns([90, 5, 5])
 with t2:
     light_mode = st.session_state.get("light_mode", False)
     theme_icon = ":material/dark_mode:" if light_mode else ":material/light_mode:"
     if st.button("", icon=theme_icon, help="Toggle Theme"):
         st.session_state.light_mode = not light_mode
+with t3:
+    if st.button("", icon=":material/logout:", help="Log Out"):
+        handle_logout()
 
 # 40% Left (Agent), 60% Right (Map)
 col_agent, col_map = st.columns([4, 6], gap="large")
@@ -422,6 +447,19 @@ with col_agent:
                         st.markdown(msg['content'] + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                     else:
                         st.markdown(msg["content"], unsafe_allow_html=True)
+
+            if st.session_state.pending_map_click and not st.session_state.sandbox_mode:
+                obj = st.session_state.last_clicked_obj
+                st.session_state.pending_map_click = None
+                
+                name = obj.get("name", "Urban Asset")
+                asset_type = obj.get("type", "Infrastructure")
+                msg_text = f"**[EVENT]** Map intersection: {name} ({asset_type})"
+                
+                with st.chat_message("user", avatar=":material/person:"):
+                    st.markdown(msg_text + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                with st.chat_message("assistant", avatar=":material/smart_toy:"):
+                    agent.analyze_asset(obj)
 
         if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
             with chat_container:
@@ -527,6 +565,8 @@ with col_map:
 
     with ctrl1:
         def cb_city_change():
+            if "city_selector" not in st.session_state:
+                return
             selected_city = st.session_state.city_selector
             st.session_state.selected_city_name = selected_city
             # Reset slider to the new city's current local time
@@ -541,6 +581,8 @@ with col_map:
             )
             activate_data_layers(st.session_state.data)
             st.session_state.need_initial_analysis = True
+            # Also clear map annotations when switching cities
+            st.session_state.map_annotations = []
 
         st.selectbox(
             ":material/location_on: Active Bio-Region",

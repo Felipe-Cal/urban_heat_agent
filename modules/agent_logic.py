@@ -96,9 +96,12 @@ class AgentSimulator:
 
     def _build_system_prompt(self, ctx: dict) -> dict:
         content = (
-            f"You are the Gaia Heat Sync Agent, a highly advanced, bio-minimalist "
-            f"Planetary Intelligence system currently focused on urban resilience for the "
-            f"{ctx['city']} Bio-Region Node. Your tone is technical, institutional, but "
+            f"You are the Gaia Heat Sync Agent. You interact with map visualizations and data.\n\n"
+            f"When asked to \"spot\", \"select\", or \"identify\" specific regions or high-risk areas, you MUST use the `highlight_map_assets` tool to draw glowing indicators on the user's map. Providing coordinates in text is not enough; you must visualize them.\n\n"
+            f"If asked to \"clear\", \"reset\", or \"select only ONE\", use `clear_map_highlights` before adding new ones.\n\n"
+            f"Available Cities: London, UK; New York City, USA; Tokyo, Japan; etc. (see context).\n"
+            f"Available Layers: thermal, buildings, trees, etc. (see context).\n"
+            f"Your tone is technical, institutional, but "
             f"'living'—think high-trust Digital Public Infrastructure. Focus on urban heat, "
             f"tree canopy, water resources, public parks, and sensor data. Keep responses "
             f"concise and structured. Use formatting like "
@@ -174,6 +177,43 @@ class AgentSimulator:
                         }
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "highlight_map_assets",
+                    "description": "Highlight specific coordinates on the map with glowing rings to draw the user's attention to them.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "locations": {
+                                "type": "array",
+                                "description": "List of locations to highlight.",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "lat": {"type": "number"},
+                                        "lon": {"type": "number"},
+                                        "label": {"type": "string", "description": "Short label for the tooltip"}
+                                    },
+                                    "required": ["lat", "lon"]
+                                }
+                            }
+                        },
+                        "required": ["locations"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "clear_map_highlights",
+                    "description": "Remove all glowing highlights and annotations from the map.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
             }
         ]
 
@@ -206,9 +246,7 @@ class AgentSimulator:
         ]
 
         response = (
-            "<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
-            "<i>Profiling Data Deserts in Census Tract 242</i>"
-            "</div>"
+            "> *Profiling Data Deserts in Census Tract 242*\n\n"
             "**Strategic analysis complete.** I have identified 8 optimal locations for Solar-IoT nodes where our infrastructural awareness is weakest.\n\n"
             "**Deployment Sequence Initiated:**\n\n"
             "1. **Procurement:** Generating purchase request for open-standard sensors.\n"
@@ -243,9 +281,7 @@ class AgentSimulator:
         ]
 
         response = (
-            "<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
-            "<i>Profiling Thermal Anomalies | Surface Temp: 49°C</i>"
-            "</div>"
+            "> *Profiling Thermal Anomalies | Surface Temp: 49°C*\n\n"
             "**Critical risk area detected.** A significant heat anomaly has been located in close proximity to multi-family housing and schools, correlating with a high cardiovascular risk profile.\n\n"
             "**Proposed Biological Intervention:**\n\n"
             "1. **Strategy:** Deploy 40 mature Coast Live Oaks + Reflective Albedo Coating.\n"
@@ -307,9 +343,7 @@ class AgentSimulator:
             )
 
         response = (
-            f"<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
-            f"<i>Profiling Regional Node: {city} [Surface: {temp:.1f}°C | Resilience: {resilience}/100]</i>"
-            f"</div>"
+            f"> *Profiling Regional Node: {city} [Surface: {temp:.1f}°C | Resilience: {resilience}/100]*\n\n"
             f"{reasoning}\n\n"
             f"**Suggested Next Steps:**\n\n"
             f"{actions}\n\n"
@@ -334,7 +368,68 @@ class AgentSimulator:
         self.add_message("user", f"**[EVENT]** Map intersection: {name} ({asset_type})")
         st.session_state.agent_status = "REASONING"
 
-        # Robust asset classification
+        # Prepare metadata string (excluding some internal keys to save tokens)
+        skip_keys = {"sourcePosition", "targetPosition", "color", "radius", "tooltip", "elevation", "height", "fill_color", "line_color", "geometry"}
+        metadata = {k: v for k, v in obj.items() if k not in skip_keys and v is not None}
+        lat = metadata.get("lat", "Unknown")
+        lon = metadata.get("lon", "Unknown")
+
+        client = self.get_client()
+        if client:
+            ctx = self._build_context()
+            system_prompt = self._build_system_prompt(ctx)
+            
+            user_prompt = f"""
+You are analyzing a specific urban asset clicked by the user on the map.
+Asset Details:
+- Name/ID: {name}
+- Type: {asset_type}
+- Coordinates: {lat}, {lon}
+- Full Extracted Metadata: {json.dumps(metadata)}
+
+Provide a very concise, context-aware analysis of this asset's impact on urban heat, biodiversity, or urban resilience in the {city} node.
+
+Format your response exactly like this:
+> *Profiling {name} ({asset_type}) at {city} Node [ID: {asset_id}]*
+
+[One concise paragraph explaining the asset's specific ecological, infrastructural, or thermal role in the current context, synthesizing the provided metadata if relevant (e.g., building type, roof shape, tree canopy, etc.).]
+
+**Suggested Next Steps:**
+1. **[Action Label]:** [Specific action related to the asset]
+2. **[Action Label]:** [Another specific action]
+3. **[Action Label]:** [A final specific action]
+"""
+            messages = [system_prompt, {"role": "user", "content": user_prompt}]
+
+            try:
+                stream = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=600,
+                    stream=True,
+                )
+                
+                def _generate_stream():
+                    for chunk in stream:
+                        delta = chunk.choices[0].delta.content
+                        if delta is not None:
+                            yield delta
+                
+                assistant_response = st.write_stream(_generate_stream())
+                self.add_message("assistant", assistant_response)
+                
+            except Exception as e:
+                # Fallback on LLM failure
+                self._analyze_asset_fallback(obj, asset_id, name, asset_type, city)
+        else:
+            # Fallback when no client available
+            self._analyze_asset_fallback(obj, asset_id, name, asset_type, city)
+
+        st.session_state.agent_status = "IDLE"
+
+    def _analyze_asset_fallback(self, obj: dict, asset_id: str, name: str, asset_type: str, city: str) -> None:
+        """Static fallback if LLM is unavailable."""
         asset_type_l = asset_type.lower()
         is_nature = any(k in asset_type_l for k in ("tree", "nature", "canopy", "park", "forest", "garden", "wood", "allotment", "plant"))
         is_water = any(k in asset_type_l for k in ("water", "wetland", "fountain", "lake", "river", "marsh", "pool", "aquatic"))
@@ -370,17 +465,25 @@ class AgentSimulator:
             )
 
         response = (
-            f"<div style='font-family: monospace; font-size: 0.85em; color: #64748b; margin-bottom: 12px; border-left: 2px solid #cbd5e1; padding-left: 8px;'>"
-            f"<i>Profiling {name} ({asset_type}) at {city} Node [ID: {asset_id}]</i>"
-            f"</div>"
+            f"> *Profiling {name} ({asset_type}) at {city} Node [ID: {asset_id}]*\n\n"
             f"{reasoning}\n\n"
             f"**Suggested Next Steps:**\n\n"
             f"{actions}\n\n"
             f"Please select an option (1-3) or ask a custom question regarding this asset."
         )
         
-        self.add_message("assistant", response)
-        st.session_state.agent_status = "IDLE"
+        # In the context of the app, this is usually called where `st.write` or similar shows the stream.
+        # But for fallback, if we just want it in history, we should also print it to UI if the structure expects it.
+        # The original code just added it to message. To simulate streaming effect for static:
+        import time
+        def _generate_synthetic():
+            words = response.split(" ")
+            for i, word in enumerate(words):
+                yield word + (" " if i < len(words) - 1 else "")
+                time.sleep(0.01)
+        
+        assistant_response = st.write_stream(_generate_synthetic())
+        self.add_message("assistant", assistant_response)
 
     def simulate_intervention_on_asset(self, obj: dict) -> None:
         """Sandbox Scenario: Propose a cooling intervention on a specific map asset."""
@@ -489,14 +592,12 @@ class AgentSimulator:
         })
 
         response = (
-            f"<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
-            f"**[ANALYZE]** Target: {name} (Surface type: {asset_type}) at {lat:.4f}, {lon:.4f}<br>"
-            f"**[PROPOSE]** Intervention: {intervention_name} | Cost: ${cost:,.0f}<br>"
-            f"**[ROI: GRID]** Est. Annual Savings: ${energy_savings:,}<br>"
-            f"**[ROI: HEALTH]** Est. ER Visits Prevented: {health_impact}<br>"
-            f"**[ROI: CLIMATE]** Est. Local Cooling: -{cooling_offset:.1f}°C<br>"
-            f"**[MINT]** Nature ID Generated: `{nature_id_hash}` (Submitting to Green Ledger)"
-            f"</div>"
+            f"> **[ANALYZE]** Target: {name} (Surface type: {asset_type}) at {lat:.4f}, {lon:.4f}  \n"
+            f"> **[PROPOSE]** Intervention: {intervention_name} | Cost: ${cost:,.0f}  \n"
+            f"> **[ROI: GRID]** Est. Annual Savings: ${energy_savings:,}  \n"
+            f"> **[ROI: HEALTH]** Est. ER Visits Prevented: {health_impact}  \n"
+            f"> **[ROI: CLIMATE]** Est. Local Cooling: -{cooling_offset:.1f}°C  \n"
+            f"> **[MINT]** Nature ID Generated: `{nature_id_hash}` (Submitting to Green Ledger)\n\n"
             f"Intervention simulated and Nature ID minted. The dashboard has been updated."
         )
         self.add_message("assistant", response)
@@ -509,11 +610,9 @@ class AgentSimulator:
         rand_val = random.randint(10_000_000_000, 100_000_000_000)
         hash_val = f"0x{rand_val}...31a"
         response = (
-            "<div style='font-family: monospace; font-size: 0.9em; margin-bottom: 10px;'>"
-            "**[REFLECT]** Comparing 2025 baseline vs 2026 satellite actuals.<br>"
-            "**[VERIFY]** Intervention #882 reduced peak temp by 2.1°C.<br>"
-            f"**[BLOCKCHAIN]** Impact Sealed. Hash: {hash_val}"
-            "</div>"
+            "> **[REFLECT]** Comparing 2025 baseline vs 2026 satellite actuals.  \n"
+            "> **[VERIFY]** Intervention #882 reduced peak temp by 2.1°C.  \n"
+            f"> **[BLOCKCHAIN]** Impact Sealed. Hash: {hash_val}\n\n"
             "Verification complete. Impact cryptographically secured to the Green Ledger."
         )
         self.add_message("assistant", response)
@@ -604,10 +703,15 @@ class AgentSimulator:
                             city_data = st.session_state.get("data")
                             count = 0
                             if city_data and asset_type:
-                                df_name = f"df_{asset_type.lower()}"
-                                if hasattr(city_data, df_name):
-                                    df = getattr(city_data, df_name)
-                                    count = len(df)
+                                # Prioritize reading the true total from the new asset_counts dict
+                                if hasattr(city_data, "asset_counts") and asset_type in city_data.asset_counts:
+                                    count = city_data.asset_counts[asset_type]
+                                else:
+                                    # Fallback to len of df if counts aren't available for some reason
+                                    df_name = f"df_{asset_type.lower()}"
+                                    if hasattr(city_data, df_name):
+                                        df = getattr(city_data, df_name)
+                                        count = len(df)
                             messages.append({
                                 "tool_call_id": tool_call.id,
                                 "role": "tool",
@@ -628,6 +732,37 @@ class AgentSimulator:
                                 "role": "tool",
                                 "name": function_name,
                                 "content": json.dumps({"status": "success", "anomalies": anomalies})
+                            })
+                        elif function_name == "highlight_map_assets":
+                            locations = function_args.get("locations", [])
+                            added = 0
+                            for loc in locations:
+                                lat = loc.get("lat")
+                                lon = loc.get("lon")
+                                label = loc.get("label", "Highlighted Asset")
+                                if lat is not None and lon is not None:
+                                    st.session_state.map_annotations.append({
+                                        "lat": float(lat),
+                                        "lon": float(lon),
+                                        "radius": 150,
+                                        "color": [239, 68, 68, 200], # Red glowing ring
+                                        "tooltip": f"<b>{label}</b><br/>Agent Highlight"
+                                    })
+                                    added += 1
+                                    
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": json.dumps({"status": "success", "message": f"Highlighted {added} locations on the map."})
+                            })
+                        elif function_name == "clear_map_highlights":
+                            st.session_state.map_annotations = []
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": json.dumps({"status": "success", "message": "All map highlights cleared."})
                             })
                         else:
                             messages.append({

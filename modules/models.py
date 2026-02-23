@@ -46,6 +46,7 @@ class CityData:
 
     current_temp: float
     current_aqi: int
+    asset_counts: dict[str, int] = field(default_factory=dict)
     # Optional: surface-level error message from data fetching (e.g. OSM timeout)
     fetch_error: str | None = None
 
