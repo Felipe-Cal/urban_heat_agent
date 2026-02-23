@@ -262,17 +262,6 @@ with st.sidebar:
     if st.button("Log Out"):
         handle_logout()
 
-# Process Pending Map Clicks and Actions BEFORE UI rendering
-# This ensures that updating toggle states (like toggle_sensors) happens before
-# Streamlit binds them to the frontend widgets.
-if st.session_state.pending_map_click:
-    prompt = st.session_state.pending_map_click
-    obj = st.session_state.last_clicked_obj
-    st.session_state.pending_map_click = None
-
-    # st.rerun() removed to avoid resetting layer toggles
-    pass
-
 if st.session_state.get("pending_quick_action"):
     action = st.session_state.pending_quick_action
     st.session_state.pending_quick_action = None
@@ -431,6 +420,16 @@ with col_agent:
                     st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
+            st.rerun()
+
+        if st.session_state.pending_map_click:
+            obj = st.session_state.last_clicked_obj
+            st.session_state.pending_map_click = None
+            with chat_container:
+                if st.session_state.sandbox_mode:
+                    agent.simulate_intervention_on_asset(obj)
+                else:
+                    agent.analyze_asset(obj)
             st.rerun()
 
     st.markdown("<br/>", unsafe_allow_html=True)

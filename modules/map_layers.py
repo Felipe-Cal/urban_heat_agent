@@ -135,37 +135,35 @@ def create_map(config: MapConfig) -> pdk.Deck:
     # ------------------------------------------------------------------
     # Sandbox simulations overlay
     # ------------------------------------------------------------------
-    if config.simulations:
-        layers.append(pdk.Layer(
-            "ScatterplotLayer", id="Simulations",
-            data=config.simulations,
-            get_position="[lon, lat]",
-            get_fill_color="color",
-            get_radius="radius",
-            pickable=True,
-            auto_highlight=True,
-            radius_min_pixels=15,
-            radius_max_pixels=50,
-        ))
+    layers.append(pdk.Layer(
+        "ScatterplotLayer", id="Simulations",
+        data=config.simulations if config.simulations else [],
+        get_position="[lon, lat]",
+        get_fill_color="color",
+        get_radius="radius",
+        pickable=True,
+        auto_highlight=True,
+        radius_min_pixels=15,
+        radius_max_pixels=50,
+    ))
 
     # ------------------------------------------------------------------
     # Agent Annotations overlay
     # ------------------------------------------------------------------
-    if config.annotations:
-        layers.append(pdk.Layer(
-            "ScatterplotLayer", id="Annotations",
-            data=config.annotations,
-            get_position="[lon, lat]",
-            get_fill_color="color",
-            get_radius="radius",
-            stroked=True,
-            get_line_color=[255, 255, 255, 255],
-            line_width_min_pixels=3,
-            pickable=True,
-            auto_highlight=True,
-            radius_min_pixels=30,
-            radius_max_pixels=100,
-        ))
+    layers.append(pdk.Layer(
+        "ScatterplotLayer", id="Annotations",
+        data=config.annotations if config.annotations else [],
+        get_position="[lon, lat]",
+        get_fill_color="color",
+        get_radius="radius",
+        stroked=True,
+        get_line_color=[255, 255, 255, 255],
+        line_width_min_pixels=3,
+        pickable=True,
+        auto_highlight=True,
+        radius_min_pixels=30,
+        radius_max_pixels=100,
+    ))
 
     # ------------------------------------------------------------------
     # View state + base map
