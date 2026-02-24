@@ -108,7 +108,9 @@ def get_city_local_time(city_name):
     utc_now = datetime.now(timezone.utc)
     # Apply offset
     city_now = utc_now + timedelta(hours=offset)
-    return city_now.time().replace(second=0, microsecond=0)
+    # Snap to nearest 15 minutes to avoid Streamlit slider mismatch errors
+    minute = (city_now.minute // 15) * 15
+    return city_now.time().replace(minute=minute, second=0, microsecond=0)
 
 # 4. Initialize Session State
 _state_defaults = {
@@ -568,16 +570,17 @@ with col_agent:
 # RIGHT COLUMN: THE BIOSPHERE (MAP & DATA)
 # ==========================================
 with col_map:
-    # Ensure data is synced in case the agent changed the city in the left column
+    # Sync time slider if either it's missing or stuck at midnight (unless it's actually midnight)
+    # The snapping in get_city_local_time ensures Streamlit doesn't reset it to 00:00.
+    if "time_slider" not in st.session_state or st.session_state.time_slider == dtime(0,0):
+        # We only force it if time_of_day is NOT midnight, to avoid infinite loop at 00:00
+        # get_city_local_time is now snapped, so this should be stable.
+        st.session_state.time_slider = st.session_state.time_of_day
+    
     if st.session_state.get("last_fetched_city") != st.session_state.selected_city_name:
-        st.session_state.city_selector = st.session_state.selected_city_name
         st.session_state.time_of_day = get_city_local_time(st.session_state.selected_city_name)
         st.session_state.time_slider = st.session_state.time_of_day
         coords = CITIES[st.session_state.selected_city_name]
-    
-    # Ensuring the slider state is always initialized to the city's current time on cold boot
-    if "time_slider" not in st.session_state or st.session_state.time_slider == dtime(0,0):
-        st.session_state.time_slider = st.session_state.time_of_day
         st.session_state.data = fetch_data_with_loading(
             coords["lat"], coords["lon"],
             st.session_state.time_of_day,
