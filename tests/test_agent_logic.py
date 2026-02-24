@@ -479,3 +479,34 @@ class TestLLMIntegration:
             agent.process_custom_query("Clear the map please.")
             
         assert len(_session_state.map_annotations) == 0
+
+    @patch("modules.agent_logic.AgentSimulator.get_client")
+    def test_process_custom_query_switch_city(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_response = MagicMock()
+        mock_message = MagicMock()
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_switch"
+        mock_tool_call.function.name = "switch_city"
+        import json
+        mock_tool_call.function.arguments = json.dumps({"city_name": "Cairo, Egypt"})
+        
+        mock_message.tool_calls = [mock_tool_call]
+        mock_message.content = ""
+        mock_response.choices = [MagicMock(message=mock_message)]
+        
+        mock_stream_response = MagicMock()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock(delta=MagicMock(content="Switched."))]
+        mock_stream_response.__iter__.return_value = iter([chunk])
+        
+        mock_client.chat.completions.create.side_effect = [mock_response, mock_stream_response]
+        
+        agent = AgentSimulator()
+        with patch("streamlit.write_stream", lambda g: "".join(list(g))):
+            agent.process_custom_query("Change city to Cairo")
+            
+        assert _session_state["selected_city_name"] == "Cairo, Egypt"
+        assert _session_state["need_initial_analysis"] is True

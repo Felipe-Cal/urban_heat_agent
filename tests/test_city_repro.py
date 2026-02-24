@@ -20,7 +20,7 @@ def test_city_selector_crash_repro():
     # Try to change the city using the selectbox
     # The selectbox has key="city_selector"
     try:
-        at.selectbox(key="city_selector").select("London, UK")
+        at.selectbox[0].select("London, UK")
         at.run()
     except Exception as e:
         pytest.fail(f"City selector crashed with error: {e}")

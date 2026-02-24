@@ -132,7 +132,6 @@ _state_defaults = {
     "need_initial_analysis": True,
     "last_fetched_city":  None,
     "map_annotations":    [],
-    "city_selector":      "New York City, USA",
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -148,6 +147,7 @@ def handle_login(email, password):
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         if response.user and response.session:
             st.session_state["user_session"] = response.user
+            st.session_state["logout_in_progress"] = False
             if cookie_manager:
                 cookie_manager.set("sb-access-token", response.session.access_token, key="set_access_token")
                 cookie_manager.set("sb-refresh-token", response.session.refresh_token, key="set_refresh_token")
@@ -165,6 +165,7 @@ def handle_signup(email, password):
                 login_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 if login_response.session:
                     st.session_state["user_session"] = login_response.user
+                    st.session_state["logout_in_progress"] = False
                     if cookie_manager:
                         cookie_manager.set("sb-access-token", login_response.session.access_token, key="signup_access_token")
                         cookie_manager.set("sb-refresh-token", login_response.session.refresh_token, key="signup_refresh_token")
@@ -189,18 +190,17 @@ def handle_logout():
     
     # Mark logout in progress to stop restore_session from auto-logging back in
     st.session_state["logout_in_progress"] = True
+    st.session_state["cookies_deleted"] = False
     
-    if cookie_manager:
-        cookie_manager.delete("sb-access-token")
-        cookie_manager.delete("sb-refresh-token")
-        time.sleep(0.5)  # Wait for cookies to actually delete before rerun
-        
-    # Clear session values but keep essential flags
+    # Clear session values but keep essential flags and widget keys that trigger on_change callbacks
     for key in list(st.session_state.keys()):
-        if key not in ["logout_in_progress", "light_mode"]:
+        if key not in ["logout_in_progress", "cookies_deleted", "light_mode", "city_selector", "time_slider"]:
             del st.session_state[key]
             
-    st.rerun()
+    # We do NOT call st.rerun() here because we will use on_click callbacks.
+    # We also do NOT delete cookies here, because a rerun immediately after
+    # will prevent the cookie manager component from sending the JS payload.
+    # Cookies will be deleted when rendering the login screen.
 
 def get_google_login_url():
     try:
@@ -219,9 +219,17 @@ def get_google_login_url():
 
 # 6. Main App Check: Show Login Page if not authenticated
 if not st.session_state.get("user_session"):
-    # Clear the logout flag now that we've successfully reached the login page
-    if st.session_state.get("logout_in_progress"):
-        st.session_state["logout_in_progress"] = False
+    # Ensure the cookie is deleted on the correct CookieManager instance
+    if st.session_state.get("logout_in_progress") and not st.session_state.get("cookies_deleted"):
+        if cookie_manager:
+            try:
+                if cookie_manager.get("sb-access-token"):
+                    cookie_manager.delete("sb-access-token")
+                if cookie_manager.get("sb-refresh-token"):
+                    cookie_manager.delete("sb-refresh-token")
+                st.session_state["cookies_deleted"] = True
+            except KeyError:
+                pass
         
     st.markdown("<h1 style='text-align: center;'>🌍 Gaia Heat Sync</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>Planetary Intelligence Platform</h3>", unsafe_allow_html=True)
@@ -284,8 +292,7 @@ if not st.session_state.get("user_session"):
 with st.sidebar:
     st.markdown("### Profile")
     st.write(f"Logged in as: `{st.session_state['user_session'].email}`")
-    if st.button("Log Out"):
-        handle_logout()
+    st.button("Log Out", on_click=handle_logout)
 
 # Layer toggles — all off by default on first page load.
 # activate_data_layers() will turn on non-thermal layers once data is ready.
@@ -407,8 +414,7 @@ with t2:
     if st.button("", icon=theme_icon, help="Toggle Theme"):
         st.session_state.light_mode = not light_mode
 with t3:
-    if st.button("", icon=":material/logout:", help="Log Out"):
-        handle_logout()
+    st.button("", icon=":material/logout:", help="Log Out", on_click=handle_logout)
 
 # 40% Left (Agent), 60% Right (Map)
 col_agent, col_map = st.columns([4, 6], gap="large")
@@ -561,14 +567,42 @@ with col_agent:
 # RIGHT COLUMN: THE BIOSPHERE (MAP & DATA)
 # ==========================================
 with col_map:
+    # Ensure data is synced in case the agent changed the city in the left column
+    if st.session_state.get("last_fetched_city") != st.session_state.selected_city_name:
+        st.session_state.city_selector = st.session_state.selected_city_name
+        st.session_state.time_of_day = get_city_local_time(st.session_state.selected_city_name)
+        coords = CITIES[st.session_state.selected_city_name]
+        st.session_state.data = fetch_data_with_loading(
+            coords["lat"], coords["lon"],
+            st.session_state.time_of_day,
+            st.session_state.selected_city_name,
+            "Agent synced connection to",
+            radius_meters=coords.get("radius", 2500),
+        )
+        st.session_state.last_fetched_city = st.session_state.selected_city_name
+        activate_data_layers(st.session_state.data)
+        city_data = st.session_state.data
+
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 1, 1, 1])
 
     with ctrl1:
         def cb_city_change():
-            if "city_selector" not in st.session_state:
-                return
-            selected_city = st.session_state.city_selector
+            pass # We don't need a callback logic here if we control by rerun
+
+        # To avoid the "set via Session State API" warning AND prevent default-to-0 bugs:
+        # We compute the current index based on the chosen city (which the agent can change).
+        current_index = list(CITIES.keys()).index(st.session_state.selected_city_name)
+        
+        selected_city = st.selectbox(
+            ":material/location_on: Active Bio-Region",
+            options=list(CITIES.keys()),
+            index=current_index,
+            label_visibility="collapsed"
+        )
+
+        if selected_city != st.session_state.selected_city_name:
             st.session_state.selected_city_name = selected_city
+            
             # Reset slider to the new city's current local time
             st.session_state.time_of_day = get_city_local_time(selected_city)
             coords = CITIES[selected_city]
@@ -579,19 +613,13 @@ with col_map:
                 "Establishing connection to",
                 radius_meters=coords.get("radius", 2500),
             )
+            st.session_state.last_fetched_city = selected_city
             activate_data_layers(st.session_state.data)
             st.session_state.need_initial_analysis = True
+            
             # Also clear map annotations when switching cities
             st.session_state.map_annotations = []
-
-        st.selectbox(
-            ":material/location_on: Active Bio-Region",
-            options=list(CITIES.keys()),
-            index=list(CITIES.keys()).index(st.session_state.selected_city_name),
-            label_visibility="collapsed",
-            key="city_selector",
-            on_change=cb_city_change
-        )
+            st.rerun()
 
     # ── Shared temporal calculations (used by Heat Risk + Avg Temp) ──────────
     from datetime import datetime, time as dtime
