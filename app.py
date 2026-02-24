@@ -571,6 +571,7 @@ with col_map:
     if st.session_state.get("last_fetched_city") != st.session_state.selected_city_name:
         st.session_state.city_selector = st.session_state.selected_city_name
         st.session_state.time_of_day = get_city_local_time(st.session_state.selected_city_name)
+        st.session_state.time_slider = st.session_state.time_of_day
         coords = CITIES[st.session_state.selected_city_name]
         st.session_state.data = fetch_data_with_loading(
             coords["lat"], coords["lon"],
@@ -605,6 +606,7 @@ with col_map:
             
             # Reset slider to the new city's current local time
             st.session_state.time_of_day = get_city_local_time(selected_city)
+            st.session_state.time_slider = st.session_state.time_of_day
             coords = CITIES[selected_city]
             st.session_state.data = fetch_data_with_loading(
                 coords["lat"], coords["lon"],
