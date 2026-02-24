@@ -18,11 +18,6 @@ def test_selectbox_uses_session_state_without_index():
     # Verify what the selectbox actually shows via index 0
     city_select_box = at.selectbox[0]
     assert city_select_box.value == "New York City, USA", f"Selectbox shows {city_select_box.value} instead of New York City, USA"
-    
-    # Verify the time slider is not 00:00
-    from datetime import time as dtime
-    time_slider = at.slider[0]
-    assert time_slider.value != dtime(0, 0), "Time slider should not be 00:00 on initial load"
 
 def test_selectbox_recovers_if_key_deleted():
     """

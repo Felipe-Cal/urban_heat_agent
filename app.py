@@ -574,10 +574,6 @@ with col_map:
         st.session_state.time_of_day = get_city_local_time(st.session_state.selected_city_name)
         st.session_state.time_slider = st.session_state.time_of_day
         coords = CITIES[st.session_state.selected_city_name]
-    
-    # Ensuring the slider state is always initialized to the city's current time on cold boot
-    if "time_slider" not in st.session_state or st.session_state.time_slider == dtime(0,0):
-        st.session_state.time_slider = st.session_state.time_of_day
         st.session_state.data = fetch_data_with_loading(
             coords["lat"], coords["lon"],
             st.session_state.time_of_day,
