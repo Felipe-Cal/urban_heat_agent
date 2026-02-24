@@ -132,7 +132,6 @@ _state_defaults = {
     "need_initial_analysis": True,
     "last_fetched_city":  None,
     "map_annotations":    [],
-    "time_slider":        get_city_local_time("New York City, USA"),
 }
 for key, default in _state_defaults.items():
     if key not in st.session_state:
@@ -801,6 +800,7 @@ with col_map:
         "Temporal Heat Simulation",
         min_value=dtime(0, 0),
         max_value=dtime(23, 45),
+        value=current_time,
         step=timedelta(minutes=15),
         format="HH:mm",
         key="time_slider",
