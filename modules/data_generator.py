@@ -10,9 +10,8 @@ Returns a CityData dataclass instead of a positional tuple.
 import json
 import os
 import random
-import re
 import string
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime
 from typing import Callable, Optional
 
 import numpy as np
@@ -202,8 +201,6 @@ def generate_mock_data(
         thermal_cache_key += f"_{bbox.min_lat:.4f}_{bbox.min_lon:.4f}_{bbox.max_lat:.4f}_{bbox.max_lon:.4f}"
     cached_thermal = _load_osm_cache(thermal_cache_key)
     
-    max_theoretical_temp = 50.0
-
     if cached_thermal and len(cached_thermal) == len(lats):
         _progress("Loaded thermal grid from cache...", 25)
         raw_temps = [pt["temp"] for pt in cached_thermal]
@@ -257,11 +254,12 @@ def generate_mock_data(
         interp_temps = np.sum(weights * temps_arr, axis=1) / np.sum(weights, axis=1)
 
         t_lo, t_hi = -10.0, 45.0
-        for r_lon, r_lat, t in zip(rand_lons, rand_lats, interp_temps):
-            t += temp_variation
-            frac = np.clip((t - t_lo) / (t_hi - t_lo), 0.0, 1.0)
-            norm_t = 0.05 + 0.45 * frac
-            thermal_data.append([r_lon, r_lat, norm_t])
+
+        # Vectorized implementation for speed (Bolt ⚡)
+        adjusted_temps = interp_temps + temp_variation
+        fracs = np.clip((adjusted_temps - t_lo) / (t_hi - t_lo), 0.0, 1.0)
+        norm_temps = 0.05 + 0.45 * fracs
+        thermal_data = np.column_stack((rand_lons, rand_lats, norm_temps))
             
         for lon, lat, t in zip(lons, lats, raw_temps):
             t += temp_variation
@@ -585,8 +583,8 @@ def generate_mock_data(
     _progress("Complete.", 100)
 
     return CityData(
-        df_thermal=pd.DataFrame(thermal_data, columns=["lon", "lat", "weight"]),
-        df_thermal_points=pd.DataFrame(thermal_points_data),
+        df_thermal=df_thermal,
+        df_thermal_points=df_thermal_points,
         df_trees=pd.DataFrame(tree_data),
         df_water=pd.DataFrame(water_data),
         df_parks=pd.DataFrame(park_data),
@@ -622,7 +620,6 @@ def _fetch_openaq_sensors(
     Fetch real sensor stations from OpenAQ v3. 
     Filters for stations updated in the last 60 days to ensure active data.
     """
-    error_msg = None
     try:
         headers = {"accept": "application/json"}
         if openaq_api_key:
@@ -795,7 +792,7 @@ def _shelter_tooltip(name: str, element_id, tags: dict) -> str:
     parts = [
         f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: SHELTER-{element_id}</span>",
-        f"<br/><br/><b>Type:</b> Emergency Shelter",
+        "<br/><br/><b>Type:</b> Emergency Shelter",
         f"<br/><span style='color:{status_color}; font-weight:600;'>{'🟢' if status == 'Open Now' else '🔴'} {status}</span>",
     ]
     if oh and status == "Check Hours":
@@ -823,7 +820,7 @@ def _fountain_tooltip(name: str, element_id, tags: dict) -> str:
     parts = [
         f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: FOUNTAIN-{element_id}</span>",
-        f"<br/><br/><b>Type:</b> Hydration Access",
+        "<br/><br/><b>Type:</b> Hydration Access",
     ]
     if tags.get("operator"):
         parts.append(f"<br/><b>Operator:</b> {tags.get('operator')}")
