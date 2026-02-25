@@ -245,8 +245,8 @@ if not st.session_state.get("user_session"):
         with tab1:
             st.subheader("Login to your account")
             with st.form("login_form"):
-                log_email = st.text_input("Email", key="log_email")
-                log_password = st.text_input("Password", type="password", key="log_password")
+                log_email = st.text_input("Email", key="log_email", placeholder="user@example.com")
+                log_password = st.text_input("Password", type="password", key="log_password", placeholder="••••••••")
                 submit_login = st.form_submit_button("Login", type="primary", use_container_width=True)
                 
                 if submit_login:
@@ -269,9 +269,9 @@ if not st.session_state.get("user_session"):
         with tab2:
             st.subheader("Create a new account")
             with st.form("signup_form"):
-                sign_email = st.text_input("Email", key="sign_email")
-                sign_password = st.text_input("Password", type="password", key="sign_password")
-                sign_password_confirm = st.text_input("Confirm Password", type="password", key="sign_password_confirm")
+                sign_email = st.text_input("Email", key="sign_email", placeholder="user@example.com")
+                sign_password = st.text_input("Password", type="password", key="sign_password", placeholder="••••••••")
+                sign_password_confirm = st.text_input("Confirm Password", type="password", key="sign_password_confirm", placeholder="••••••••")
                 submit_signup = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
                 
                 if submit_signup:
@@ -821,27 +821,27 @@ with col_map:
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>MAP LAYERS</p>", unsafe_allow_html=True)
     r1, r2, r3 = st.columns(3)
     with r1:
-        _layer_toggle("Thermal", "toggle_thermal", not d.df_thermal.empty)
+        _layer_toggle("🌡️ Thermal", "toggle_thermal", not d.df_thermal.empty)
     with r2:
-        _layer_toggle("Air Quality", "toggle_sensors", not d.df_sensors.empty)
+        _layer_toggle("💨 Air Quality", "toggle_sensors", not d.df_sensors.empty)
     with r3:
-        _layer_toggle("Buildings", "toggle_buildings", not d.df_buildings.empty)
-        _layer_toggle("Traffic", "toggle_traffic", not d.df_traffic.empty)
+        _layer_toggle("🏢 Buildings", "toggle_buildings", not d.df_buildings.empty)
+        _layer_toggle("🚗 Traffic", "toggle_traffic", not d.df_traffic.empty)
 
     st.markdown("<p style='font-size: 0.8em; color: #94a3b8; font-weight: 600; margin-bottom: 0; margin-top: 10px;'>NATURE & ASSETS</p>", unsafe_allow_html=True)
     n1, n2, n3 = st.columns(3)
     with n1:
-        _layer_toggle("Tree Canopy",       "toggle_trees",      not d.df_trees.empty)
-        _layer_toggle("Urban Forests",     "toggle_forests",    not d.df_forests.empty)
-        _layer_toggle("Community Gardens", "toggle_gardens",    not d.df_gardens.empty)
+        _layer_toggle("🌳 Tree Canopy",       "toggle_trees",      not d.df_trees.empty)
+        _layer_toggle("🌲 Urban Forests",     "toggle_forests",    not d.df_forests.empty)
+        _layer_toggle("🌻 Community Gardens", "toggle_gardens",    not d.df_gardens.empty)
     with n2:
-        _layer_toggle("Water Sources",     "toggle_water",      not d.df_water.empty)
-        _layer_toggle("Wetlands",          "toggle_wetlands",   not d.df_wetlands.empty)
-        _layer_toggle("Drinking Fountains","toggle_fountains",  not d.df_fountains.empty)
+        _layer_toggle("💧 Water Sources",     "toggle_water",      not d.df_water.empty)
+        _layer_toggle("🌾 Wetlands",          "toggle_wetlands",   not d.df_wetlands.empty)
+        _layer_toggle("🚰 Drinking Fountains","toggle_fountains",  not d.df_fountains.empty)
     with n3:
-        _layer_toggle("Public Parks",      "toggle_parks",      not d.df_parks.empty)
-        _layer_toggle("Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
-        _layer_toggle("Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
+        _layer_toggle("🏞️ Public Parks",      "toggle_parks",      not d.df_parks.empty)
+        _layer_toggle("🌿 Green Roofs",       "toggle_green_roofs",not d.df_green_roofs.empty)
+        _layer_toggle("❄️ Cooling Centers",   "toggle_shelters",   not d.df_shelters.empty)
 
     with map_placeholder:
         map_config = MapConfig(
