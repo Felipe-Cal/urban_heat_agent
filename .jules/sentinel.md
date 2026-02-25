@@ -1,0 +1,4 @@
+## 2024-05-23 - Stored XSS in Streamlit Chat
+**Vulnerability:** User input in `st.chat_input` and map object properties (which could come from external data) were rendered directly into `st.markdown(..., unsafe_allow_html=True)` without sanitization. This allowed execution of arbitrary JavaScript via `<script>` tags.
+**Learning:** Streamlit's `unsafe_allow_html=True` flag disables all internal sanitization for that specific markdown block. When concatenating user input with safe HTML (like `<span class='user-msg-marker'></span>`), the user input *must* be explicitly escaped.
+**Prevention:** Use `html.escape(user_input)` before interpolating it into any string that will be rendered with `unsafe_allow_html=True`. This neutralizes HTML tags while preserving Markdown syntax like `**bold**` and `*italic*`.
