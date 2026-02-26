@@ -245,8 +245,8 @@ if not st.session_state.get("user_session"):
         with tab1:
             st.subheader("Login to your account")
             with st.form("login_form"):
-                log_email = st.text_input("Email", key="log_email")
-                log_password = st.text_input("Password", type="password", key="log_password")
+                log_email = st.text_input("Email", key="log_email", placeholder="you@example.com", autocomplete="username")
+                log_password = st.text_input("Password", type="password", key="log_password", placeholder="Your password", autocomplete="current-password")
                 submit_login = st.form_submit_button("Login", type="primary", use_container_width=True)
                 
                 if submit_login:
@@ -269,9 +269,9 @@ if not st.session_state.get("user_session"):
         with tab2:
             st.subheader("Create a new account")
             with st.form("signup_form"):
-                sign_email = st.text_input("Email", key="sign_email")
-                sign_password = st.text_input("Password", type="password", key="sign_password")
-                sign_password_confirm = st.text_input("Confirm Password", type="password", key="sign_password_confirm")
+                sign_email = st.text_input("Email", key="sign_email", placeholder="you@example.com", autocomplete="email")
+                sign_password = st.text_input("Password", type="password", key="sign_password", placeholder="At least 6 characters", help="Password must be at least 6 characters long.", autocomplete="new-password")
+                sign_password_confirm = st.text_input("Confirm Password", type="password", key="sign_password_confirm", placeholder="Re-enter password", autocomplete="new-password")
                 submit_signup = st.form_submit_button("Sign Up", type="primary", use_container_width=True)
                 
                 if submit_signup:
