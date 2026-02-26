@@ -14,6 +14,7 @@ import re
 import string
 from datetime import date, datetime, time as dtime
 from typing import Callable, Optional
+import concurrent.futures
 
 import numpy as np
 import pandas as pd
@@ -670,11 +671,11 @@ def _fetch_openaq_sensors(
         if not active_results:
             active_results = results[:10]
 
-        for loc in active_results[:25]:
+        def _fetch_single_sensor(loc):
             coords = loc.get("coordinates", {})
             lat, lon = coords.get("latitude"), coords.get("longitude")
             if lat is None or lon is None:
-                continue
+                return None
             
             loc_id = loc.get("id")
             sensor_id = f"OAQ-{loc_id}"
@@ -723,14 +724,24 @@ def _fetch_openaq_sensors(
             color = "rgba(16, 185, 129, 0.8)" if local_aqi < 50 else \
                     "rgba(245, 158, 11, 0.8)" if local_aqi < 100 else "rgba(239, 68, 68, 0.8)"
             
-            sensor_data.append({
+            return {
                 "lon": lon, "lat": lat,
                 "sensor_id": sensor_id,
                 "aqi": local_aqi,
                 "pollutant": pollutant,
                 "color": color,
                 "tooltip": _sensor_tooltip(sensor_id, local_aqi, lat, lon, pollutant),
-            })
+            }
+
+        # Use ThreadPoolExecutor to fetch sensor details in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # Only process up to 25 locations
+            futures = [executor.submit(_fetch_single_sensor, loc) for loc in active_results[:25]]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    sensor_data.append(result)
+
         return sensor_data, None
     except Exception as e:
         print(f"OpenAQ fetch failed: {e}")
