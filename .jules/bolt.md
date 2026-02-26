@@ -1,0 +1,3 @@
+## 2024-02-23 - `for...else` Logic Pitfall
+**Learning:** Python's `for...else` construct can be confusing and lead to logic errors if the indentation or intent is misunderstood. The `else` block executes when the loop completes *without* hitting a `break` statement. This is often the opposite of what is intended (e.g., "if loop didn't run").
+**Action:** Avoid `for...else` for simple fallback logic. Instead, initialize a default value before the loop or conditional block, and overwrite it if the condition is met. This makes the control flow explicit and less prone to misinterpretation or indentation errors.
