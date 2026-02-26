@@ -4,6 +4,7 @@ from datetime import datetime, time as dtime, timedelta
 import streamlit as st
 import pandas as pd
 import numpy as np
+import html
 import time
 import os
 from supabase import create_client, Client
@@ -450,7 +451,7 @@ with col_agent:
                 avatar = ":material/person:" if msg["role"] == "user" else ":material/smart_toy:"
                 with st.chat_message(msg["role"], avatar=avatar):
                     if msg["role"] == "user":
-                        st.markdown(msg['content'] + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                        st.markdown(html.escape(msg['content']) + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                     else:
                         st.markdown(msg["content"], unsafe_allow_html=True)
 
