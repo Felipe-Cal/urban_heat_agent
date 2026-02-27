@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import time
 import os
+import html
 from supabase import create_client, Client
 from modules.styles import load_css
 from modules.data_generator import generate_mock_data
@@ -460,7 +461,7 @@ with col_agent:
                 
                 name = obj.get("name", "Urban Asset")
                 asset_type = obj.get("type", "Infrastructure")
-                msg_text = f"**[EVENT]** Map intersection: {name} ({asset_type})"
+                msg_text = f"**[EVENT]** Map intersection: {html.escape(str(name))} ({html.escape(str(asset_type))})"
                 
                 with st.chat_message("user", avatar=":material/person:"):
                     st.markdown(msg_text + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
@@ -470,7 +471,8 @@ with col_agent:
         if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
             with chat_container:
                 with st.chat_message("user", avatar=":material/person:"):
-                    st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                    safe_prompt = html.escape(str(prompt))
+                    st.markdown(safe_prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
             # Remove st.rerun() so layer toggles are not lost

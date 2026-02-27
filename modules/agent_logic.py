@@ -12,6 +12,7 @@ import re
 import string
 import tempfile
 import time
+import html
 from datetime import datetime
 from typing import Optional
 
@@ -305,7 +306,9 @@ class AgentSimulator:
         temp = getattr(data, "current_temp", 30.0) if data else 30.0
         resilience = getattr(data, "resilience_score", 50) if data else 50
 
-        self.add_message("user", f"**[EVENT]** Node Connection: {city}")
+        # Sanitize city name before adding to message
+        safe_city = html.escape(str(city))
+        self.add_message("user", f"**[EVENT]** Node Connection: {safe_city}")
         st.session_state.agent_status = "REASONING"
         
         if city == "New York City, USA":
@@ -365,7 +368,10 @@ class AgentSimulator:
         asset_type = obj.get("type", "Infrastructure")
         city = st.session_state.get("selected_city_name", "Current City")
 
-        self.add_message("user", f"**[EVENT]** Map intersection: {name} ({asset_type})")
+        # Sanitize inputs before reflecting them in the user message
+        safe_name = html.escape(str(name))
+        safe_type = html.escape(str(asset_type))
+        self.add_message("user", f"**[EVENT]** Map intersection: {safe_name} ({safe_type})")
         st.session_state.agent_status = "REASONING"
 
         # Prepare metadata string (excluding some internal keys to save tokens)
@@ -496,7 +502,10 @@ Format your response exactly like this:
         city_data = st.session_state.get("data")
         surface_temp = getattr(city_data, "current_temp", 35.0) if city_data else 35.0
 
-        user_prompt = f"**[SANDBOX]** Propose a cooling intervention for {name} ({asset_type}) at {lat}, {lon}."
+        # Sanitize inputs before adding to chat history
+        safe_name = html.escape(str(name))
+        safe_type = html.escape(str(asset_type))
+        user_prompt = f"**[SANDBOX]** Propose a cooling intervention for {safe_name} ({safe_type}) at {lat}, {lon}."
         self.add_message("user", user_prompt)
         st.session_state.agent_status = "REASONING"
 
@@ -626,7 +635,9 @@ Format your response exactly like this:
         """Handle arbitrary user input, using function calling to interact with tools."""
         st.session_state.map_annotations = []
         
-        self.add_message("user", query)
+        # Sanitize user query before reflecting
+        safe_query = html.escape(str(query))
+        self.add_message("user", safe_query)
         st.session_state.agent_status = "REASONING"
 
         client = self.get_client()
