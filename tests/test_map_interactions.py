@@ -1,4 +1,3 @@
-import pytest
 from streamlit.testing.v1 import AppTest
 
 def test_map_interaction_triggers_agent():

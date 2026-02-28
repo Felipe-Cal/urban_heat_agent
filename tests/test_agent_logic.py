@@ -5,10 +5,7 @@ Streamlit's session_state is mocked via a simple dict-backed object so tests
 run outside the Streamlit runtime.
 """
 import sys
-import types
-import unittest
-from datetime import datetime
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

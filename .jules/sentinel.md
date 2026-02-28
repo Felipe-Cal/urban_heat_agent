@@ -1,0 +1,4 @@
+## YYYY-MM-DD - XSS Vulnerability in Chat
+**Vulnerability:** The application is vulnerable to Stored and Reflected XSS because `unsafe_allow_html=True` is used for rendering user input in `st.markdown()` within the chat interface, and the input is not sanitized using `html.escape`.
+**Learning:** Streamlit's `st.markdown(..., unsafe_allow_html=True)` can execute arbitrary scripts if the input is user-controlled. All user inputs rendered with this option MUST be sanitized.
+**Prevention:** Always use `html.escape(str(value))` on user-controlled input before passing it to `st.markdown(..., unsafe_allow_html=True)`. Additionally, for assistant messages, render them without `unsafe_allow_html=True` (e.g., `st.markdown(msg['content'])`) to prevent Stored XSS from untrusted or injected LLM output while allowing safe Markdown rendering.

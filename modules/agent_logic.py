@@ -8,7 +8,6 @@ and delegates context building to a single private helper to avoid repetition.
 import json
 import os
 import random
-import re
 import string
 import tempfile
 import time
@@ -419,7 +418,7 @@ Format your response exactly like this:
                 assistant_response = st.write_stream(_generate_stream())
                 self.add_message("assistant", assistant_response)
                 
-            except Exception as e:
+            except Exception:
                 # Fallback on LLM failure
                 self._analyze_asset_fallback(obj, asset_id, name, asset_type, city)
         else:
@@ -445,23 +444,23 @@ Format your response exactly like this:
         elif is_water:
             reasoning = f"The selected hydrological asset (**{name}**) provides evaporative cooling benefits and blue-green infrastructure value to the {city} node."
             actions = (
-                f"1. **Thermal Scan:** Assess the evaporative cooling footprint of this water body on surrounding terrain.\n"
-                f"2. **Riparian Buffer Analysis:** Scan for adjacent concrete surfaces that could be converted to absorbing buffers.\n"
-                f"3. **Simulate Enhancement:** Enter Sandbox mode to model expanding its wetland periphery."
+                "1. **Thermal Scan:** Assess the evaporative cooling footprint of this water body on surrounding terrain.\n"
+                "2. **Riparian Buffer Analysis:** Scan for adjacent concrete surfaces that could be converted to absorbing buffers.\n"
+                "3. **Simulate Enhancement:** Enter Sandbox mode to model expanding its wetland periphery."
             )
         elif is_emergency:
             reasoning = f"The selected facility (**{name}**) serves as a critical relief node during acute thermal stress events in {city}."
             actions = (
-                f"1. **Check Capacity:** I can query real-time availability and operating status.\n"
-                f"2. **Route Analysis:** Identify vulnerable populations within a 15-minute walking radius of this shelter.\n"
-                f"3. **Resource Allocation:** Simulate deploying additional emergency supplies to this node."
+                "1. **Check Capacity:** I can query real-time availability and operating status.\n"
+                "2. **Route Analysis:** Identify vulnerable populations within a 15-minute walking radius of this shelter.\n"
+                "3. **Resource Allocation:** Simulate deploying additional emergency supplies to this node."
             )
         else: # Buildings, Roads, Traffic, etc
             reasoning = f"The selected infrastructure (**{name}**) consists predominantly of impervious surfaces and contributes to localized thermal friction (Urban Heat Island effect)."
             actions = (
-                f"1. **Thermal Scan:** I can assess the exact surface temperature anomaly of this specific asset.\n"
-                f"2. **Simulate Retrofit:** Enter Sandbox mode to model adding a green roof or applying high-albedo (cool) coatings.\n"
-                f"3. **Vulnerability Map:** Correlate this asset's heat retention with nearby population density."
+                "1. **Thermal Scan:** I can assess the exact surface temperature anomaly of this specific asset.\n"
+                "2. **Simulate Retrofit:** Enter Sandbox mode to model adding a green roof or applying high-albedo (cool) coatings.\n"
+                "3. **Vulnerability Map:** Correlate this asset's heat retention with nearby population density."
             )
 
         response = (
@@ -528,7 +527,7 @@ Format your response exactly like this:
                 cost = int(result.get("cost", 50000))
                 energy_savings = int(result.get("energy_savings", 5000))
                 health_impact = int(result.get("health_impact", 0))
-            except Exception as e:
+            except Exception:
                 intervention_name = "Emergency Albedo Enhancement"
                 cooling_offset, cost, energy_savings, health_impact = 0.2, 50000, 5000, 0
         else:

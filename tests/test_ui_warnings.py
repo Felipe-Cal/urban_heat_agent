@@ -1,6 +1,4 @@
-import streamlit as st
 from streamlit.testing.v1 import AppTest
-import pytest
 
 def test_selectbox_uses_session_state_without_index():
     at = AppTest.from_file("app.py", default_timeout=30)

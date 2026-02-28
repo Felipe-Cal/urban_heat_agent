@@ -1,5 +1,4 @@
 import pytest
-import pydeck as pdk
 from modules.models import MapConfig, CityData, LayerToggles
 from modules.map_layers import create_map
 import pandas as pd
