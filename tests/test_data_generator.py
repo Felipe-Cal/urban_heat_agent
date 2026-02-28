@@ -3,18 +3,14 @@ Tests for modules/data_generator.py
 
 All HTTP calls are mocked so tests run offline and fast.
 """
-import random
-import unittest
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
 # We need to make sure streamlit is not actually called during testing.
 # Patch it at the module level before importing data_generator.
 import sys
-from types import ModuleType
 
 # Minimal streamlit session_state mock so the module-level 'import streamlit as st'
 # inside data_generator doesn't crash in a non-Streamlit environment.

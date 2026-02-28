@@ -1,4 +1,5 @@
 import random
+import html
 from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime, time as dtime, timedelta
 import streamlit as st
@@ -450,9 +451,9 @@ with col_agent:
                 avatar = ":material/person:" if msg["role"] == "user" else ":material/smart_toy:"
                 with st.chat_message(msg["role"], avatar=avatar):
                     if msg["role"] == "user":
-                        st.markdown(msg['content'] + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                        st.markdown(html.escape(str(msg['content'])) + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                     else:
-                        st.markdown(msg["content"], unsafe_allow_html=True)
+                        st.markdown(msg["content"])
 
             if st.session_state.pending_map_click and not st.session_state.sandbox_mode:
                 obj = st.session_state.last_clicked_obj
@@ -463,14 +464,14 @@ with col_agent:
                 msg_text = f"**[EVENT]** Map intersection: {name} ({asset_type})"
                 
                 with st.chat_message("user", avatar=":material/person:"):
-                    st.markdown(msg_text + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                    st.markdown(html.escape(str(msg_text)) + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.analyze_asset(obj)
 
         if prompt := st.chat_input("Ask Gaia to analyze regions, verify data, or propose interventions..."):
             with chat_container:
                 with st.chat_message("user", avatar=":material/person:"):
-                    st.markdown(prompt + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
+                    st.markdown(html.escape(str(prompt)) + "<span class='user-msg-marker'></span>", unsafe_allow_html=True)
                 with st.chat_message("assistant", avatar=":material/smart_toy:"):
                     agent.process_custom_query(prompt)
             # Remove st.rerun() so layer toggles are not lost

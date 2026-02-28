@@ -1,5 +1,4 @@
 from streamlit.testing.v1 import AppTest
-import pytest
 
 def test_city_sync_app_level():
     """

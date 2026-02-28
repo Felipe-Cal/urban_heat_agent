@@ -10,9 +10,8 @@ Returns a CityData dataclass instead of a positional tuple.
 import json
 import os
 import random
-import re
 import string
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime
 from typing import Callable, Optional
 
 import numpy as np
@@ -795,7 +794,7 @@ def _shelter_tooltip(name: str, element_id, tags: dict) -> str:
     parts = [
         f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: SHELTER-{element_id}</span>",
-        f"<br/><br/><b>Type:</b> Emergency Shelter",
+        "<br/><br/><b>Type:</b> Emergency Shelter",
         f"<br/><span style='color:{status_color}; font-weight:600;'>{'🟢' if status == 'Open Now' else '🔴'} {status}</span>",
     ]
     if oh and status == "Check Hours":
@@ -823,7 +822,7 @@ def _fountain_tooltip(name: str, element_id, tags: dict) -> str:
     parts = [
         f"<b style='font-size: 14px; color: #00e5ff;'>{name}</b>",
         f"<br/><span style='color:#94a3b8; font-size:11px; font-family: monospace;'>ID: FOUNTAIN-{element_id}</span>",
-        f"<br/><br/><b>Type:</b> Hydration Access",
+        "<br/><br/><b>Type:</b> Hydration Access",
     ]
     if tags.get("operator"):
         parts.append(f"<br/><b>Operator:</b> {tags.get('operator')}")

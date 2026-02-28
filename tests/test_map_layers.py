@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pydeck as pdk
-import pytest
 
 # Mock streamlit before importing map_layers
 st_mock = MagicMock()
